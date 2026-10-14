@@ -1,0 +1,18 @@
+# Конфигурация Cloudflare Worker для TOTS.
+# database_id подставляется автоматически в .github/workflows/cloudflare.yml
+name = "tots"
+main = "worker/src/index.js"
+compatibility_date = "2025-09-01"
+
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+
+[vars]
+START_BALANCE = "10"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "tots"
+database_id = "__D1_DATABASE_ID__"
+migrations_dir = "worker/migrations"

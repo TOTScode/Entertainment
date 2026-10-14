@@ -8,6 +8,25 @@
 
 Стек: Python 3.11+, aiogram 3 (бот), aiohttp (веб-сервер и API), SQLite.
 
+## Хостинг на Cloudflare Workers (рекомендуется)
+
+Сервер (`worker/src/index.js`) и интерфейс работают на Cloudflare Workers, баланс хранится в базе
+Cloudflare D1. Каждый запрос проверяет подпись Telegram, поэтому изменить баланс со стороны пользователя нельзя.
+Деплой выполняется автоматически при пуше в `main` (`.github/workflows/cloudflare.yml`).
+
+Разовая настройка:
+1. Зарегистрируйтесь на https://dash.cloudflare.com и откройте раздел **Workers & Pages**, чтобы
+   у аккаунта появился поддомен `*.workers.dev`.
+2. **Account ID** указан справа на странице Workers & Pages (или в адресной строке дашборда).
+3. API-токен: My Profile → API Tokens → Create Token → шаблон **Edit Cloudflare Workers**,
+   затем добавьте право **Account → D1 → Edit** → Create Token.
+4. В GitHub: Settings → Secrets and variables → Actions → New repository secret. Создайте
+   `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` и `BOT_TOKEN` (токен бота из BotFather).
+5. Actions → Deploy to Cloudflare Workers → Run workflow. Адрес приложения будет
+   `https://tots.<ваш-поддомен>.workers.dev`, его и указывайте в BotFather.
+
+Важно: в России Cloudflare местами замедляют, у части пользователей приложение может открываться плохо.
+
 ## Хостинг на GitHub Pages (без сервера)
 
 Папка `webapp/` автоматически публикуется на GitHub Pages при каждом пуше в `main`
@@ -65,7 +84,8 @@ docker run -d --env-file .env -p 8080:8080 -v tots-data:/data tots
 
 ## Как устроено
 
-- `web.py` — раздаёт страницу и API `GET /api/me`. Каждый запрос проверяет подпись `initData`;
+- `worker/` — сервер для Cloudflare Workers (JavaScript) и миграции базы D1.
+- `web.py` — Python-версия сервера (для VPS); раздаёт страницу и API `GET /api/me`. Каждый запрос проверяет подпись `initData`;
   при первом запросе пользователь создаётся со стартовым балансом, дальше обновляются только имя и фото.
 - `db.py` — таблица `users` (id Telegram, имя, username, фото, `balance` в бистах).
 - `bot.py` — команда `/start` с кнопкой «Открыть TOTS» и ссылкой на приложение.
