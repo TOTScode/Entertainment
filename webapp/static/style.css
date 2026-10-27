@@ -129,3 +129,10 @@ h3 { font-size: 16px; }
 .brow .rank.top { line-height: 1; }
 /* Место под закреплённую строку, чтобы она не закрывала конец списка */
 #tab-table { padding-bottom: 64px; }
+.brow .mini, .brow .who { cursor: pointer; }
+.hist .reason { display: block; font-size: 13px; color: var(--text); opacity: .8; }
+.gold { color: var(--gold); }
+.link { text-decoration: none; display: block; }
+.ustats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 18px; text-align: center; }
+.ustats b { font-size: 17px; }
+#user-dialog .sheet-head { margin-bottom: 4px; }

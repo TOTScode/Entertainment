@@ -84,6 +84,12 @@ export async function leaderboard(db, { period = "all", userId, limit = 100, ts 
   };
 }
 
+// Место пользователя в общей таблице
+export async function overallRank(db, userId) {
+  const row = await db.prepare(`${rankedSql(null)}SELECT rank FROM ranked WHERE id = ?`).bind(userId).first();
+  return row ? row.rank : null;
+}
+
 // Снимок общего рейтинга на начало дня по Москве. Запускается по расписанию (Cron Trigger).
 export async function takeSnapshot(db, ts = Math.floor(Date.now() / 1000)) {
   const day = moscowDay(ts);
@@ -113,7 +119,10 @@ export async function history(db, userId, { before = null, limit = 30 } = {}) {
   const cursor = Number(before) > 0 ? Number(before) : Number.MAX_SAFE_INTEGER;
   const { results } = await db
     .prepare(
-      "SELECT id, amount, type, created_at FROM transactions WHERE user_id = ? AND id < ? ORDER BY id DESC LIMIT ?",
+      // Для корректировок администратора подтягиваем причину из журнала действий администраторов
+      "SELECT t.id, t.amount, t.type, t.created_at, a.reason FROM transactions t " +
+      "LEFT JOIN audit_log a ON t.ref = 'audit:' || a.id " +
+      "WHERE t.user_id = ? AND t.id < ? ORDER BY t.id DESC LIMIT ?",
     )
     .bind(userId, cursor, size + 1)
     .all();

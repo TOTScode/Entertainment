@@ -137,7 +137,11 @@ function boardRow(r) {
   chg.className = "chg";
   if (r.change > 0) { chg.textContent = `▲${r.change}`; chg.classList.add("plus"); }
   else if (r.change < 0) { chg.textContent = `▼${-r.change}`; chg.classList.add("minus"); }
-  li.append(rank, avatarEl(r, "mini"), who, score, chg);
+  const ava = avatarEl(r, "mini");
+  // Тап по аватару или имени открывает профиль участника
+  if (r.id !== me.id) { ava.onclick = who.onclick = () => openUser(r.id); }
+  else { ava.onclick = who.onclick = () => openTab("profile"); }
+  li.append(rank, ava, who, score, chg);
   return li;
 }
 
@@ -175,6 +179,32 @@ async function loadBoard() {
   }
 }
 
+// --- профиль другого участника ---
+
+async function openUser(id) {
+  const dlg = $("user-dialog");
+  for (const f of ["u-name", "u-username", "u-tenure", "u-rank", "u-balance", "u-earned", "u-spent"]) $(f).textContent = "";
+  $("u-avatar").style.backgroundImage = "";
+  $("u-avatar").textContent = "";
+  dlg.classList.remove("hidden");
+  try {
+    const u = await api(`/api/users/${id}`);
+    const ava = avatarEl(u);
+    $("u-avatar").style.backgroundImage = ava.style.backgroundImage;
+    $("u-avatar").textContent = ava.textContent;
+    $("u-name").textContent = u.name;
+    $("u-username").textContent = u.username ? "@" + u.username : "";
+    $("u-username").href = u.username ? `https://t.me/${encodeURIComponent(u.username)}` : "";
+    $("u-tenure").textContent = `Стаж ${tenure(u.registered_at)}`;
+    $("u-rank").textContent = u.rank ?? "—";
+    $("u-balance").textContent = u.balance;
+    $("u-earned").textContent = `+${u.stats.earned}`;
+    $("u-spent").textContent = `−${u.stats.spent}`;
+  } catch (e) {
+    $("u-name").textContent = e.message;
+  }
+}
+
 // --- история операций ---
 
 async function loadHistory() {
@@ -193,6 +223,12 @@ async function loadHistory() {
       const when = document.createElement("span");
       when.className = "when";
       when.textContent = new Date(t.created_at * 1000).toLocaleString("ru-RU", { dateStyle: "medium", timeStyle: "short" });
+      if (t.reason) {
+        const reason = document.createElement("span");
+        reason.className = "reason";
+        reason.textContent = `«${t.reason}»`;
+        label.appendChild(reason);
+      }
       label.appendChild(when);
       const amount = document.createElement("b");
       amount.className = t.amount > 0 ? "plus" : "minus";
@@ -364,6 +400,8 @@ async function init() {
   $("nick-input").addEventListener("keydown", (e) => e.key === "Enter" && saveNickname());
   // Закрытие по тапу на затемнение вокруг окна
   $("nick-dialog").addEventListener("click", (e) => e.target === e.currentTarget && closeNickDialog());
+  $("user-close").onclick = () => $("user-dialog").classList.add("hidden");
+  $("user-dialog").addEventListener("click", (e) => e.target === e.currentTarget && e.target.classList.add("hidden"));
   if (me.is_admin) {
     $("admin").classList.remove("hidden");
     $("admin-search").onclick = adminSearch;

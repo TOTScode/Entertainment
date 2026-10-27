@@ -5,8 +5,8 @@
 import { safeEqual, validateInitData, webhookSecret } from "./auth.js";
 import { handleAdmin, isAdmin } from "./admin.js";
 import { handleUpdate } from "./bot.js";
-import { history, leaderboard, takeSnapshot, userStats } from "./leaderboard.js";
-import { displayName, registerOrUpdate, setNickname, telegramName, validateNickname, yearsSince } from "./users.js";
+import { history, leaderboard, overallRank, takeSnapshot, userStats } from "./leaderboard.js";
+import { displayName, getUser, registerOrUpdate, setNickname, telegramName, validateNickname, yearsSince } from "./users.js";
 
 export { validateInitData, webhookSecret } from "./auth.js";
 
@@ -42,6 +42,23 @@ async function handleApi(request, env, path) {
   const params = new URL(request.url).searchParams;
   if (path === "/api/leaderboard" && request.method === "GET") {
     return json(await leaderboard(env.DB, { period: params.get("period") || "all", userId: user.id }));
+  }
+
+  // Публичный профиль другого участника: без истории операций
+  const other = /^\/api\/users\/(\d+)$/.exec(path);
+  if (other && request.method === "GET") {
+    const target = await getUser(env.DB, Number(other[1]));
+    if (!target) return json({ error: "Пользователь не найден" }, 404);
+    return json({
+      id: target.id,
+      name: displayName(target),
+      username: target.username,
+      photo_url: target.photo_url,
+      balance: target.balance,
+      registered_at: target.created_at,
+      rank: await overallRank(env.DB, target.id),
+      stats: await userStats(env.DB, target.id),
+    });
   }
 
   if (path === "/api/history" && request.method === "GET") {

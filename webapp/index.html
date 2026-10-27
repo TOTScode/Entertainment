@@ -90,7 +90,7 @@
           <div id="admin-msg" class="msg hidden"></div>
         </div>
 
-        <h3 class="mt">Журнал действий</h3>
+        <h3 class="mt">Действия администраторов</h3>
         <ul id="admin-audit" class="list"><li class="muted">Пока пусто</li></ul>
       </div>
 
@@ -113,6 +113,30 @@
       <input id="nick-input" class="input" maxlength="24" placeholder="Ваш ник" autocomplete="off">
       <div id="nick-msg" class="msg hidden"></div>
       <button id="nick-save" class="btn wide">Сохранить</button>
+    </div>
+  </div>
+
+  <!-- Профиль другого участника -->
+  <div id="user-dialog" class="overlay hidden" role="dialog" aria-modal="true">
+    <div class="sheet">
+      <div class="sheet-head">
+        <span></span>
+        <button id="user-close" class="icon-btn" aria-label="Закрыть">✕</button>
+      </div>
+      <div class="profile">
+        <div id="u-avatar" class="avatar"></div>
+        <div class="profile-text">
+          <div id="u-name" class="name"></div>
+          <a id="u-username" class="muted link" target="_blank" rel="noopener"></a>
+          <div id="u-tenure" class="muted tenure"></div>
+        </div>
+      </div>
+      <div class="ustats">
+        <div><div class="muted">Место</div><b id="u-rank">—</b></div>
+        <div><div class="muted">Баланс</div><b id="u-balance" class="gold">—</b></div>
+        <div><div class="muted">Получено</div><b id="u-earned" class="plus">—</b></div>
+        <div><div class="muted">Потрачено</div><b id="u-spent" class="minus">—</b></div>
+      </div>
     </div>
   </div>
 

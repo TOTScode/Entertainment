@@ -172,3 +172,21 @@ test("расписание делает снимок рейтинга", async ()
   const row = env.DB.raw.prepare("SELECT * FROM rank_snapshots").get();
   assert.deepEqual([row.day, row.user_id, row.rank], ["2026-10-28", 7, 1]);
 });
+
+test("история показывает причину корректировки, чужой профиль открывается без истории", async () => {
+  await call("/api/me", alexey);
+  const admin = { id: ADMIN, first_name: "Админ", username: "boss" };
+  await call("/api/me", admin);
+  await call("/api/admin/adjust", admin, { method: "POST", body: { user_id: 7, amount: 5, reason: "Лучший комментарий" } });
+
+  const hist = await call("/api/history", alexey);
+  assert.deepEqual(hist.data.items.map((t) => [t.type, t.reason]), [["admin_adjustment", "Лучший комментарий"], ["signup_bonus", null]]);
+
+  const other = await call("/api/users/1", alexey);
+  assert.equal(other.data.name, "Админ");
+  assert.equal(other.data.username, "boss");
+  assert.equal(other.data.rank, 2);
+  assert.deepEqual(other.data.stats, { earned: 10, spent: 0 });
+  assert.equal(other.data.items, undefined);
+  assert.equal((await call("/api/users/404", alexey)).status, 404);
+});
