@@ -30,10 +30,30 @@
 5. Actions → Deploy to Cloudflare Workers → Run workflow. Адрес приложения будет
    `https://tots.<ваш-поддомен>.workers.dev`, его и указывайте в BotFather.
 
+## Проверка до мёржа (тестовая копия)
+
+Для каждого PR `.github/workflows/preview.yml` выкладывает отдельную копию приложения
+`https://tots-preview.<поддомен>.workers.dev` со своей базой `tots-preview`. База каждый раз собирается
+из копии рабочей базы, и к ней применяются новые миграции. Рабочее приложение и его база не меняются.
+
+Чтобы открыть копию в Telegram (один раз): в @BotFather `/newapp` → бот TOTS_official_bot →
+название «TOTS test», Web App URL — адрес копии, short name `preview`. Ссылка: `https://t.me/TOTS_official_bot/preview`.
+Бот на сообщения отвечает только из рабочей версии: вебхук у бота один.
+
 Важно: в России Cloudflare местами замедляют, у части пользователей приложение может открываться плохо.
 6. Администраторы: узнайте свой Telegram ID командой `/id` в боте, затем в GitHub откройте
    Settings → Secrets and variables → Actions → вкладка **Variables** → New repository variable,
    имя `ADMIN_IDS`, значение — ID через запятую. Запустите деплой ещё раз.
+
+## Проверка до мёржа (тестовая копия)
+
+Для каждого PR `.github/workflows/preview.yml` выкладывает отдельную копию приложения
+`https://tots-preview.<поддомен>.workers.dev` со своей базой `tots-preview`. База каждый раз собирается
+из копии рабочей базы, и к ней применяются новые миграции. Рабочее приложение и его база не меняются.
+
+Чтобы открыть копию в Telegram (один раз): в @BotFather `/newapp` → бот TOTS_official_bot →
+название «TOTS test», Web App URL — адрес копии, short name `preview`. Ссылка: `https://t.me/TOTS_official_bot/preview`.
+Бот на сообщения отвечает только из рабочей версии: вебхук у бота один.
 
 Важно: в России Cloudflare местами замедляют, у части пользователей приложение может открываться плохо.
 
