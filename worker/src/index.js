@@ -76,7 +76,7 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (url.pathname === "/api/me") {
-      const tgUser = await validateInitData(request.headers.get("X-Telegram-Init-Data"), env.BOT_TOKEN);
+      const tgUser = await validateInitData(request.headers.get("X-Telegram-Init-Data"), (env.BOT_TOKEN || "").trim());
       if (!tgUser) return json({ error: "Откройте приложение из Telegram" }, 401);
       const [user, isNew] = await registerOrUpdate(env.DB, tgUser, Number(env.START_BALANCE || 10));
       return json({

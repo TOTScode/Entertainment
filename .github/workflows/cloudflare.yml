@@ -61,4 +61,10 @@ jobs:
 
       - name: Set bot token
         if: steps.secrets.outputs.ready == 'true'
-        run: echo "$BOT_TOKEN" | npx -y wrangler@4 secret put BOT_TOKEN
+        run: printf '%s' "$BOT_TOKEN" | tr -d '[:space:]' | npx -y wrangler@4 secret put BOT_TOKEN
+
+      - name: Show which bot the token belongs to
+        if: steps.secrets.outputs.ready == 'true'
+        run: |
+          token=$(printf '%s' "$BOT_TOKEN" | tr -d '[:space:]')
+          curl -sS "https://api.telegram.org/bot$token/getMe" | jq -c '{ok, username: .result.username, description}'
