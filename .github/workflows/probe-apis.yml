@@ -3,6 +3,10 @@ name: Probe football APIs
 # Ручная проверка бесплатных API для прогнозов: Actions → Probe football APIs → Run workflow
 on:
   workflow_dispatch:
+    inputs:
+      probe:
+        description: "all — всё, odds — только коэффициенты"
+        default: all
 
 jobs:
   probe:
@@ -10,6 +14,7 @@ jobs:
     env:
       FOOTBALL_DATA_TOKEN: ${{ secrets.FOOTBALL_DATA_TOKEN }}
       ODDSPAPI_KEY: ${{ secrets.ODDSPAPI_KEY }}
+      PROBE: ${{ inputs.probe }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

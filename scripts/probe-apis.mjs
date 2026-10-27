@@ -62,8 +62,11 @@ async function oddsPapi() {
     await sleep(1100);
   }
   if (!base) return;
+  const oddsOnly = process.env.PROBE === "odds";
   const call = async (path) => { await sleep(2100); return get(`${base}/v4/${path}${path.includes("?") ? "&" : "?"}apiKey=${OP}`); };
 
+  if (!oddsOnly) await tournamentsAndResults();
+  async function tournamentsAndResults() {
   // Турниры футбола
   const t = await call("tournaments?sportId=10");
   console.log(`\ntournaments: HTTP ${t.status}`);
@@ -90,26 +93,25 @@ async function oddsPapi() {
     const s = await call(`scores?fixtureId=${ended.fixtureId}`);
     console.log(`\nscores (${ended.participant1Name} — ${ended.participant2Name}): HTTP ${s.status} ${short(s.body, 800)}`);
   }
+  }
 
-  // Коэффициенты АПЛ одним запросом
-  const o = await call("odds-by-tournaments?tournamentIds=17&bookmakers=pinnacle,bet365");
-  console.log(`\nodds-by-tournaments АПЛ: HTTP ${o.status}`);
-  const fixtures = Array.isArray(o.body) ? o.body : o.body?.fixtures || [];
-  console.log(`  матчей с коэффициентами: ${fixtures.length}`);
-  const first = fixtures[0];
-  if (first) {
-    for (const [bk, b] of Object.entries(first.bookmakerOdds || {})) {
-      const markets = Object.keys(b.markets || {});
-      console.log(`  ${bk}: рынков ${markets.length}; 1X2 (101): ${markets.includes("101")}; точный счёт (10336): ${markets.includes("10336")}`);
-      for (const id of ["101", "10336"]) {
-        const m = b.markets?.[id];
-        if (!m) continue;
-        const prices = Object.entries(m.outcomes || {}).slice(0, 6).map(([oid, out]) => `${oid}=${Object.values(out.players || {})[0]?.price}`);
-        console.log(`    рынок ${id}: ${prices.join(" ")}`);
-      }
+  // Коэффициенты АПЛ одним запросом: бесплатный тариф принимает ровно одного букмекера
+  for (const bookmaker of ["pinnacle", "bet365"]) {
+    const o = await call(`odds-by-tournaments?tournamentIds=17&bookmaker=${bookmaker}&verbosity=3`);
+    const fixtures = Array.isArray(o.body) ? o.body : o.body?.fixtures || [];
+    console.log(`\nodds-by-tournaments АПЛ, ${bookmaker}: HTTP ${o.status}, матчей с коэффициентами: ${fixtures.length}`);
+    if (!fixtures.length) { console.log(`  ${short(o.body)}`); continue; }
+    console.log(`  первый матч: ${fixtures[0].startTime}, поля: ${Object.keys(fixtures[0]).join(", ")}`);
+    const b = Object.values(fixtures[0].bookmakerOdds || {})[0] || {};
+    const markets = Object.entries(b.markets || {});
+    console.log(`  рынков: ${markets.length}, ids: ${markets.map(([id, m]) => `${id}(${Object.keys(m.outcomes || {}).length})`).join(" ").slice(0, 900)}`);
+    for (const [id, m] of markets.filter(([id, m]) => id === "101" || Object.keys(m.outcomes || {}).length >= 10).slice(0, 4)) {
+      const prices = Object.entries(m.outcomes || {}).slice(0, 8).map(([oid, out]) => {
+        const p = Object.values(out.players || {})[0] || {};
+        return `${oid}:${p.playerName ?? ""}=${p.price}`;
+      });
+      console.log(`    рынок ${id}: ${prices.join("  ")}`);
     }
-  } else {
-    console.log(`  ${short(o.body)}`);
   }
 
   const a = await call("account");
@@ -117,5 +119,5 @@ async function oddsPapi() {
   console.log(`\nпосле проверки использовано запросов: ${cur.request_count} из ${cur.request_limit}`);
 }
 
-await footballData();
+if (process.env.PROBE !== "odds") await footballData();
 await oddsPapi();
