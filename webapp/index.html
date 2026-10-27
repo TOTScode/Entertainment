@@ -10,28 +10,101 @@
 <body>
   <header class="top">
     <div class="logo">TOTS</div>
+    <div id="balance-chip" class="chip hidden"><span id="chip-balance">0</span> BIST</div>
   </header>
 
   <main>
-    <section id="profile" class="card profile hidden">
-      <div id="avatar" class="avatar"></div>
-      <div>
-        <div id="name" class="name"></div>
-        <div id="username" class="muted"></div>
+    <section id="loading" class="card muted">Загрузка…</section>
+    <section id="error" class="card error hidden"></section>
+
+    <!-- Викторины -->
+    <section id="tab-quizzes" class="tab hidden">
+      <div class="card soon">
+        <div class="soon-icon">🧠</div>
+        <h2>Викторины</h2>
+        <p id="quiz-soon" class="muted">Скоро здесь появятся ежедневные викторины с наградами в BIST.</p>
       </div>
     </section>
 
-    <section id="wallet" class="card wallet hidden">
-      <div class="muted">Баланс</div>
-      <div class="balance"><span id="balance">—</span> <span id="coin-label">бистов</span></div>
-      <div id="welcome" class="welcome hidden"></div>
+    <!-- Прогнозы -->
+    <section id="tab-predictions" class="tab hidden">
+      <div class="card soon">
+        <div class="soon-icon">⚽️</div>
+        <h2>Прогнозы</h2>
+        <p class="muted">Скоро: прогнозы на матчи топ-лиг, ЧМ и Евро.</p>
+      </div>
     </section>
 
-    <section id="loading" class="card muted">Загрузка…</section>
-    <section id="error" class="card error hidden"></section>
+    <!-- Таблица -->
+    <section id="tab-table" class="tab hidden">
+      <div class="card soon">
+        <div class="soon-icon">🏆</div>
+        <h2>Таблица</h2>
+        <p class="muted">Скоро: рейтинг всех участников по балансу BIST.</p>
+      </div>
+    </section>
+
+    <!-- Профиль -->
+    <section id="tab-profile" class="tab hidden">
+      <div class="card profile">
+        <div id="avatar" class="avatar"></div>
+        <div class="profile-text">
+          <div id="name" class="name"></div>
+          <div id="username" class="muted"></div>
+        </div>
+      </div>
+
+      <div class="card wallet">
+        <div class="muted">Баланс</div>
+        <div class="balance"><span id="balance">—</span> <span id="coin-label">BIST</span></div>
+        <div id="welcome" class="welcome hidden"></div>
+      </div>
+
+      <div class="card">
+        <div class="row"><span class="muted">В TOTS с</span><span id="registered"></span></div>
+        <div class="row"><span class="muted">Стаж</span><span id="years"></span></div>
+      </div>
+
+      <div class="card">
+        <h3>Ник</h3>
+        <p class="muted small">По умолчанию показывается имя из Telegram. Оставьте поле пустым, чтобы вернуть его.</p>
+        <div class="inline">
+          <input id="nick-input" class="input" maxlength="24" placeholder="Ваш ник" autocomplete="off">
+          <button id="nick-save" class="btn">Сохранить</button>
+        </div>
+        <div id="nick-msg" class="msg hidden"></div>
+      </div>
+
+      <!-- Админка: показывается только администраторам -->
+      <div id="admin" class="card hidden">
+        <h3>🛠 Админка</h3>
+        <div class="inline">
+          <input id="admin-q" class="input" placeholder="ID, @username или имя" autocomplete="off">
+          <button id="admin-search" class="btn">Найти</button>
+        </div>
+        <ul id="admin-users" class="list"></ul>
+
+        <div id="admin-form" class="admin-form hidden">
+          <div id="admin-target" class="name small-name"></div>
+          <input id="admin-amount" class="input" type="number" step="1" placeholder="Сумма: +25 или -10">
+          <input id="admin-reason" class="input" maxlength="200" placeholder="Причина (обязательно)">
+          <button id="admin-apply" class="btn">Изменить баланс</button>
+          <div id="admin-msg" class="msg hidden"></div>
+        </div>
+
+        <h3 class="mt">Журнал действий</h3>
+        <ul id="admin-audit" class="list"><li class="muted">Пока пусто</li></ul>
+      </div>
+    </section>
   </main>
 
-  <script src="static/config.js"></script>
+  <nav id="nav" class="nav hidden">
+    <button data-tab="quizzes"><span>🧠</span>Викторины</button>
+    <button data-tab="predictions"><span>⚽️</span>Прогнозы</button>
+    <button data-tab="table"><span>🏆</span>Таблица</button>
+    <button data-tab="profile"><span>👤</span>Профиль</button>
+  </nav>
+
   <script src="static/app.js"></script>
 </body>
 </html>

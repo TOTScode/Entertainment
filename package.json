@@ -1,0 +1,8 @@
+{
+  "name": "tots",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test worker/test/*.test.js"
+  }
+}
