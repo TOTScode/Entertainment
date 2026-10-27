@@ -76,3 +76,21 @@ h3 { font-size: 16px; }
 }
 .nav button span { font-size: 20px; }
 .nav button.active { color: var(--accent); }
+.name-row { display: flex; align-items: center; gap: 6px; }
+.icon-btn {
+  background: none; border: 0; padding: 4px; font-size: 16px; line-height: 1; cursor: pointer;
+  color: var(--hint); border-radius: 8px; flex-shrink: 0;
+}
+.icon-btn:active { background: var(--bg); }
+.tenure { margin-top: 2px; }
+.btn.wide { width: 100%; margin-top: 4px; }
+.overlay {
+  position: fixed; inset: 0; z-index: 10; background: rgba(0, 0, 0, .5);
+  display: flex; align-items: flex-end; justify-content: center;
+}
+.sheet {
+  width: 100%; max-width: 520px; background: var(--card); border-radius: 18px 18px 0 0;
+  padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+}
+.sheet-head { display: flex; justify-content: space-between; align-items: center; }
+.sheet-head h3 { margin: 0; }

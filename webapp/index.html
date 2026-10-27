@@ -49,8 +49,12 @@
       <div class="card profile">
         <div id="avatar" class="avatar"></div>
         <div class="profile-text">
-          <div id="name" class="name"></div>
+          <div class="name-row">
+            <div id="name" class="name"></div>
+            <button id="nick-edit" class="icon-btn" aria-label="Изменить ник" title="Изменить ник">✏️</button>
+          </div>
           <div id="username" class="muted"></div>
+          <div id="tenure" class="muted tenure"></div>
         </div>
       </div>
 
@@ -58,21 +62,6 @@
         <div class="muted">Баланс</div>
         <div class="balance"><span id="balance">—</span> <span id="coin-label">BIST</span></div>
         <div id="welcome" class="welcome hidden"></div>
-      </div>
-
-      <div class="card">
-        <div class="row"><span class="muted">В TOTS с</span><span id="registered"></span></div>
-        <div class="row"><span class="muted">Стаж</span><span id="years"></span></div>
-      </div>
-
-      <div class="card">
-        <h3>Ник</h3>
-        <p class="muted small">По умолчанию показывается имя из Telegram. Оставьте поле пустым, чтобы вернуть его.</p>
-        <div class="inline">
-          <input id="nick-input" class="input" maxlength="24" placeholder="Ваш ник" autocomplete="off">
-          <button id="nick-save" class="btn">Сохранить</button>
-        </div>
-        <div id="nick-msg" class="msg hidden"></div>
       </div>
 
       <!-- Админка: показывается только администраторам -->
@@ -97,6 +86,20 @@
       </div>
     </section>
   </main>
+
+  <!-- Окно смены ника -->
+  <div id="nick-dialog" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="nick-title">
+    <div class="sheet">
+      <div class="sheet-head">
+        <h3 id="nick-title">Ник</h3>
+        <button id="nick-close" class="icon-btn" aria-label="Закрыть">✕</button>
+      </div>
+      <p class="muted small">По умолчанию показывается имя из Telegram. Оставьте поле пустым, чтобы вернуть его.</p>
+      <input id="nick-input" class="input" maxlength="24" placeholder="Ваш ник" autocomplete="off">
+      <div id="nick-msg" class="msg hidden"></div>
+      <button id="nick-save" class="btn wide">Сохранить</button>
+    </div>
+  </div>
 
   <nav id="nav" class="nav hidden">
     <button data-tab="quizzes"><span>🧠</span>Викторины</button>

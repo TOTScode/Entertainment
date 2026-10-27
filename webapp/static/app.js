@@ -7,11 +7,32 @@ const TABS = ["quizzes", "predictions", "table", "profile"];
 let me = null;
 let adminTarget = null;
 
-function pluralYears(n) {
+function plural(n, one, few, many) {
   const m10 = n % 10, m100 = n % 100;
-  if (m10 === 1 && m100 !== 11) return "год";
-  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return "года";
-  return "лет";
+  if (m10 === 1 && m100 !== 11) return one;
+  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
+  return many;
+}
+
+// Стаж от даты регистрации: «1 год 10 месяцев 3 дня» (нулевые части не показываем)
+function tenure(fromTs, now = new Date()) {
+  const from = new Date(fromTs * 1000);
+  let y = now.getFullYear() - from.getFullYear();
+  let m = now.getMonth() - from.getMonth();
+  let d = now.getDate() - from.getDate();
+  if (d < 0) {
+    m -= 1;
+    d += new Date(now.getFullYear(), now.getMonth(), 0).getDate(); // дней в прошлом месяце
+  }
+  if (m < 0) {
+    y -= 1;
+    m += 12;
+  }
+  const parts = [];
+  if (y > 0) parts.push(`${y} ${plural(y, "год", "года", "лет")}`);
+  if (m > 0) parts.push(`${m} ${plural(m, "месяц", "месяца", "месяцев")}`);
+  if (d > 0 || !parts.length) parts.push(`${d} ${plural(d, "день", "дня", "дней")}`);
+  return parts.join(" ");
 }
 
 async function api(path, options = {}) {
@@ -57,10 +78,20 @@ function renderProfile() {
   }
   $("balance").textContent = me.balance;
   $("chip-balance").textContent = me.balance;
-  $("registered").textContent = formatDate(me.registered_at);
-  $("years").textContent = `${me.years_in_tots} ${pluralYears(me.years_in_tots)}`;
+  $("tenure").textContent = `Стаж ${tenure(me.registered_at)}`;
+  $("tenure").title = `В TOTS с ${formatDate(me.registered_at)}`;
+}
+
+function openNickDialog() {
   $("nick-input").value = me.nickname || "";
   $("nick-input").placeholder = me.telegram_name;
+  $("nick-msg").classList.add("hidden");
+  $("nick-dialog").classList.remove("hidden");
+  $("nick-input").focus();
+}
+
+function closeNickDialog() {
+  $("nick-dialog").classList.add("hidden");
 }
 
 async function saveNickname() {
@@ -69,7 +100,8 @@ async function saveNickname() {
   try {
     me = { ...me, ...(await api("/api/nickname", { method: "POST", body: JSON.stringify({ nickname: $("nick-input").value }) })) };
     renderProfile();
-    showMsg($("nick-msg"), "Сохранено", true);
+    closeNickDialog();
+    tg?.HapticFeedback?.notificationOccurred("success");
   } catch (e) {
     showMsg($("nick-msg"), e.message, false);
   } finally {
@@ -191,7 +223,12 @@ async function init() {
     $("welcome").classList.remove("hidden");
     tg.HapticFeedback?.notificationOccurred("success");
   }
+  $("nick-edit").onclick = openNickDialog;
+  $("nick-close").onclick = closeNickDialog;
   $("nick-save").onclick = saveNickname;
+  $("nick-input").addEventListener("keydown", (e) => e.key === "Enter" && saveNickname());
+  // Закрытие по тапу на затемнение вокруг окна
+  $("nick-dialog").addEventListener("click", (e) => e.target === e.currentTarget && closeNickDialog());
   if (me.is_admin) {
     $("admin").classList.remove("hidden");
     $("admin-search").onclick = adminSearch;
