@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       probe:
-        description: "all — всё, odds — только коэффициенты"
+        description: "all — всё, odds — только коэффициенты, markets — справочник рынков"
         default: all
 
 jobs:

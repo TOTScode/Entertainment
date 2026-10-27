@@ -65,6 +65,16 @@ async function oddsPapi() {
   const oddsOnly = process.env.PROBE === "odds";
   const call = async (path) => { await sleep(2100); return get(`${base}/v4/${path}${path.includes("?") ? "&" : "?"}apiKey=${OP}`); };
 
+  if (process.env.PROBE === "markets") {
+    const m = await call("markets?language=en");
+    const list = Array.isArray(m.body) ? m.body : [];
+    console.log(`\nmarkets: HTTP ${m.status}, рынков ${list.length}`);
+    for (const x of list.filter((x) => [101, 10336].includes(x.marketId))) {
+      console.log(`  ${x.marketId} ${x.marketName} ${x.marketType} ${x.period}: ${x.outcomes.map((o) => `${o.outcomeId}=${o.outcomeName}`).join(" ")}`);
+    }
+    if (!list.length) console.log(`  ${short(m.body)}`);
+    return;
+  }
   if (!oddsOnly) await tournamentsAndResults();
   async function tournamentsAndResults() {
   // Турниры футбола
@@ -119,5 +129,5 @@ async function oddsPapi() {
   console.log(`\nпосле проверки использовано запросов: ${cur.request_count} из ${cur.request_limit}`);
 }
 
-if (process.env.PROBE !== "odds") await footballData();
+if (!["odds", "markets"].includes(process.env.PROBE)) await footballData();
 await oddsPapi();
