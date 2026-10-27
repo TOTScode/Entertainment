@@ -147,3 +147,28 @@ test("вебхук: чужой секрет отклоняется, /start от�
   await hook(secret, "/id");
   assert.match(sent[1].body.text, /55/);
 });
+
+test("API таблицы, истории и статистики", async () => {
+  await call("/api/me", alexey);
+  await call("/api/me", { id: 8, first_name: "Иван" });
+  const me = await call("/api/me", alexey);
+  assert.deepEqual(me.data.stats, { earned: 10, spent: 0 });
+
+  const board = await call("/api/leaderboard?period=week", alexey);
+  assert.equal(board.data.period, "week");
+  assert.equal(board.data.rows.length, 2);
+  assert.equal(board.data.me.id, 7);
+
+  const hist = await call("/api/history", alexey);
+  assert.deepEqual(hist.data.items.map((t) => [t.amount, t.type]), [[10, "signup_bonus"]]);
+  assert.equal((await call("/api/leaderboard")).status, 401);
+});
+
+test("расписание делает снимок рейтинга", async () => {
+  await call("/api/me", alexey);
+  const waits = [];
+  await worker.scheduled({ scheduledTime: Date.UTC(2026, 9, 27, 21, 1) }, env, { waitUntil: (p) => waits.push(p) });
+  await Promise.all(waits);
+  const row = env.DB.raw.prepare("SELECT * FROM rank_snapshots").get();
+  assert.deepEqual([row.day, row.user_id, row.rank], ["2026-10-28", 7, 1]);
+});

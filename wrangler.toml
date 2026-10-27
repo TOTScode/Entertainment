@@ -8,6 +8,10 @@ compatibility_date = "2025-09-01"
 directory = "./dist"
 binding = "ASSETS"
 
+# Снимок рейтинга для стрелок изменения места: 00:01 по Москве (21:01 UTC)
+[triggers]
+crons = ["1 21 * * *"]
+
 [vars]
 START_BALANCE = "10"
 # Telegram ID администраторов через запятую. В деплое берётся из переменной репозитория ADMIN_IDS.

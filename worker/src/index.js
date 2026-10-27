@@ -5,6 +5,7 @@
 import { safeEqual, validateInitData, webhookSecret } from "./auth.js";
 import { handleAdmin, isAdmin } from "./admin.js";
 import { handleUpdate } from "./bot.js";
+import { history, leaderboard, takeSnapshot, userStats } from "./leaderboard.js";
 import { displayName, registerOrUpdate, setNickname, telegramName, validateNickname, yearsSince } from "./users.js";
 
 export { validateInitData, webhookSecret } from "./auth.js";
@@ -34,7 +35,18 @@ async function handleApi(request, env, path) {
   if (!tgUser) return json({ error: "Откройте приложение из Telegram" }, 401);
   const [user, isNew] = await registerOrUpdate(env.DB, tgUser, Number(env.START_BALANCE || 10));
 
-  if (path === "/api/me" && request.method === "GET") return json(profile(user, env, isNew));
+  if (path === "/api/me" && request.method === "GET") {
+    return json({ ...profile(user, env, isNew), stats: await userStats(env.DB, user.id) });
+  }
+
+  const params = new URL(request.url).searchParams;
+  if (path === "/api/leaderboard" && request.method === "GET") {
+    return json(await leaderboard(env.DB, { period: params.get("period") || "all", userId: user.id }));
+  }
+
+  if (path === "/api/history" && request.method === "GET") {
+    return json(await history(env.DB, user.id, { before: params.get("before") }));
+  }
 
   if (path === "/api/nickname" && request.method === "POST") {
     const body = await request.json().catch(() => ({}));
@@ -70,5 +82,10 @@ export default {
 
     if (url.pathname.startsWith("/api/")) return handleApi(request, env, url.pathname);
     return env.ASSETS.fetch(request);
+  },
+
+  // Cron Trigger из wrangler.toml: снимок рейтинга в начале каждого дня по Москве
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(takeSnapshot(env.DB, Math.floor(event.scheduledTime / 1000)));
   },
 };

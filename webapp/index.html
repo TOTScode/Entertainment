@@ -37,11 +37,16 @@
 
     <!-- Таблица -->
     <section id="tab-table" class="tab hidden">
-      <div class="card soon">
-        <div class="soon-icon">🏆</div>
-        <h2>Таблица</h2>
-        <p class="muted">Скоро: рейтинг всех участников по балансу BIST.</p>
+      <div class="segmented" role="tablist">
+        <button data-period="all" class="active">Общая</button>
+        <button data-period="week">Неделя</button>
+        <button data-period="month">Месяц</button>
       </div>
+      <div class="card board-card">
+        <div id="board-note" class="muted small"></div>
+        <ol id="board" class="board"></ol>
+      </div>
+      <div id="board-me" class="board-me hidden"></div>
     </section>
 
     <!-- Профиль -->
@@ -62,6 +67,10 @@
         <div class="muted">Баланс</div>
         <div class="balance"><span id="balance">—</span> <span id="coin-label">BIST</span></div>
         <div id="welcome" class="welcome hidden"></div>
+        <div class="stats">
+          <div><div class="muted">Получено</div><b id="stat-earned" class="plus">—</b></div>
+          <div><div class="muted">Потрачено</div><b id="stat-spent" class="minus">—</b></div>
+        </div>
       </div>
 
       <!-- Админка: показывается только администраторам -->
@@ -83,6 +92,12 @@
 
         <h3 class="mt">Журнал действий</h3>
         <ul id="admin-audit" class="list"><li class="muted">Пока пусто</li></ul>
+      </div>
+
+      <div class="card">
+        <h3>История</h3>
+        <ul id="history" class="list"></ul>
+        <div id="history-more" class="muted small center hidden">Загрузка…</div>
       </div>
     </section>
   </main>

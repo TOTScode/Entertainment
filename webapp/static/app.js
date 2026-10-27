@@ -6,6 +6,18 @@ const $ = (id) => document.getElementById(id);
 const TABS = ["quizzes", "predictions", "table", "profile"];
 let me = null;
 let adminTarget = null;
+let boardPeriod = "all";
+let historyNext = undefined; // undefined — ещё не грузили, null — больше нет
+let historyLoading = false;
+
+const TX_LABELS = {
+  signup_bonus: "Бонус за регистрацию",
+  admin_adjustment: "Корректировка администратора",
+  quiz_reward: "Награда за викторину",
+  bet: "Прогноз",
+  payout: "Выигрыш по прогнозу",
+  refund: "Возврат",
+};
 
 function plural(n, one, few, many) {
   const m10 = n % 10, m100 = n % 100;
@@ -58,6 +70,15 @@ function showMsg(el, text, ok) {
 
 function openTab(name) {
   for (const t of TABS) $(`tab-${t}`).classList.toggle("hidden", t !== name);
+  if (name === "table") loadBoard();
+  document.querySelectorAll(".segmented button").forEach((b) => (b.onclick = () => {
+    boardPeriod = b.dataset.period;
+    document.querySelectorAll(".segmented button").forEach((x) => x.classList.toggle("active", x === b));
+    loadBoard();
+  }));
+  // Подгрузка истории при прокрутке до конца списка
+  new IntersectionObserver(([e]) => e.isIntersecting && loadHistory()).observe($("history-more"));
+  loadHistory();
   document.querySelectorAll("#nav button").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
   try { localStorage.setItem("tots_tab", name); } catch {}
 }
@@ -80,6 +101,119 @@ function renderProfile() {
   $("chip-balance").textContent = me.balance;
   $("tenure").textContent = `Стаж ${tenure(me.registered_at)}`;
   $("tenure").title = `В TOTS с ${formatDate(me.registered_at)}`;
+  if (me.stats) {
+    $("stat-earned").textContent = `+${me.stats.earned}`;
+    $("stat-spent").textContent = `−${me.stats.spent}`;
+  }
+}
+
+function signed(n) {
+  return n > 0 ? `+${n}` : n < 0 ? `−${-n}` : "0";
+}
+
+function avatarEl(user, extra = "") {
+  const el = document.createElement("div");
+  el.className = `avatar ${extra}`;
+  if (user.photo_url) el.style.backgroundImage = `url("${encodeURI(user.photo_url)}")`;
+  else el.textContent = (user.name || "?").trim().charAt(0).toUpperCase();
+  return el;
+}
+
+// --- таблица ---
+
+function boardRow(r) {
+  const li = document.createElement("li");
+  li.className = `brow${r.id === me.id ? " me" : ""}`;
+  const rank = document.createElement("span");
+  rank.className = `rank${r.rank <= 3 ? " top" : ""}`;
+  rank.textContent = ["🥇", "🥈", "🥉"][r.rank - 1] || r.rank;
+  const who = document.createElement("span");
+  who.className = "who";
+  who.textContent = r.name;
+  const score = document.createElement("span");
+  score.className = "score";
+  score.textContent = boardPeriod === "all" ? r.score : signed(r.score);
+  const chg = document.createElement("span");
+  chg.className = "chg";
+  if (r.change > 0) { chg.textContent = `▲${r.change}`; chg.classList.add("plus"); }
+  else if (r.change < 0) { chg.textContent = `▼${-r.change}`; chg.classList.add("minus"); }
+  li.append(rank, avatarEl(r, "mini"), who, score, chg);
+  return li;
+}
+
+let boardObserver = null;
+async function loadBoard() {
+  const period = boardPeriod;
+  const list = $("board");
+  try {
+    const data = await api(`/api/leaderboard?period=${period}`);
+    if (period !== boardPeriod) return; // пока грузили, переключили вкладку
+    list.innerHTML = "";
+    $("board-note").textContent =
+      data.since == null ? `Участников: ${data.total}` :
+      `${period === "week" ? "Заработано за неделю" : "Заработано за месяц"} с ${new Date(data.since * 1000).toLocaleDateString("ru-RU", { day: "numeric", month: "long", timeZone: "Europe/Moscow" })}`;
+    let myRow = null;
+    for (const r of data.rows) {
+      const li = boardRow(r);
+      if (r.id === me.id) myRow = li;
+      list.appendChild(li);
+    }
+    // Своя строка закреплена внизу, пока её не видно в списке
+    const pinned = $("board-me");
+    pinned.innerHTML = "";
+    boardObserver?.disconnect();
+    if (data.me) pinned.appendChild(boardRow(data.me));
+    if (!data.me) pinned.classList.add("hidden");
+    else if (!myRow) pinned.classList.remove("hidden");
+    else {
+      boardObserver = new IntersectionObserver(([e]) => pinned.classList.toggle("hidden", e.isIntersecting));
+      boardObserver.observe(myRow);
+    }
+  } catch (e) {
+    list.innerHTML = "";
+    $("board-note").textContent = e.message;
+  }
+}
+
+// --- история операций ---
+
+async function loadHistory() {
+  if (historyLoading || historyNext === null) return;
+  historyLoading = true;
+  const more = $("history-more");
+  try {
+    const q = historyNext ? `?before=${historyNext}` : "";
+    const data = await api(`/api/history${q}`);
+    const list = $("history");
+    for (const t of data.items) {
+      const li = document.createElement("li");
+      li.className = "hist";
+      const label = document.createElement("span");
+      label.textContent = TX_LABELS[t.type] || t.type;
+      const when = document.createElement("span");
+      when.className = "when";
+      when.textContent = new Date(t.created_at * 1000).toLocaleString("ru-RU", { dateStyle: "medium", timeStyle: "short" });
+      label.appendChild(when);
+      const amount = document.createElement("b");
+      amount.className = t.amount > 0 ? "plus" : "minus";
+      amount.textContent = signed(t.amount);
+      li.append(label, amount);
+      list.appendChild(li);
+    }
+    historyNext = data.next;
+    if (!list.children.length) list.innerHTML = '<li class="muted">Пока нет операций</li>';
+    more.classList.toggle("hidden", historyNext === null);
+  } catch (e) {
+    more.textContent = e.message;
+  } finally {
+    historyLoading = false;
+  }
+}
+
+function resetHistory() {
+  $("history").innerHTML = "";
+  historyNext = undefined;
+  loadHistory();
 }
 
 function openNickDialog() {
@@ -158,8 +292,9 @@ async function adminApply() {
     $("admin-reason").value = "";
     showMsg($("admin-msg"), "Баланс изменён и записан в журнал", true);
     if (res.user.id === me.id) {
-      me.balance = res.user.balance;
+      me = { ...me, ...(await api("/api/me")) };
       renderProfile();
+      resetHistory();
     }
     adminSearch();
     loadAudit();
@@ -236,6 +371,14 @@ async function init() {
     $("admin-apply").onclick = adminApply;
     loadAudit();
   }
+  document.querySelectorAll(".segmented button").forEach((b) => (b.onclick = () => {
+    boardPeriod = b.dataset.period;
+    document.querySelectorAll(".segmented button").forEach((x) => x.classList.toggle("active", x === b));
+    loadBoard();
+  }));
+  // Подгрузка истории при прокрутке до конца списка
+  new IntersectionObserver(([e]) => e.isIntersecting && loadHistory()).observe($("history-more"));
+  loadHistory();
   document.querySelectorAll("#nav button").forEach((b) => (b.onclick = () => openTab(b.dataset.tab)));
   $("loading").classList.add("hidden");
   $("nav").classList.remove("hidden");
