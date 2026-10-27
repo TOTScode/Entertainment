@@ -32,6 +32,9 @@
 6. Администраторы: узнайте свой Telegram ID командой `/id` в боте, затем в GitHub откройте
    Settings → Secrets and variables → Actions → вкладка **Variables** → New repository variable,
    имя `ADMIN_IDS`, значение — ID через запятую. Запустите деплой ещё раз.
+7. Прогнозы: добавьте секреты `ODDSPAPI_KEY` (https://oddspapi.io, бесплатно 250 запросов в месяц:
+   матчи и коэффициенты) и `FOOTBALL_DATA_TOKEN` (https://www.football-data.org, бесплатно: результаты
+   АПЛ, Бундеслиги, Ла Лиги и ЛЧ). Без них сервис работает, но матчи не обновляются.
 
 ## Откат
 
@@ -48,6 +51,10 @@
 - `worker/src/users.js` — пользователи, ники, журнал транзакций BIST.
 - `worker/src/admin.js` — API админки и журнал аудита.
 - `worker/src/bot.js` — ответы бота.
+- `worker/src/predictions.js` — прогнозы: приём, замена, отмена, расчёт, исправление счёта.
+- `worker/src/providers.js` — клиенты OddsPapi и football-data.org; `worker/src/sync.js` — обновление
+  матчей, коэффициентов и результатов по расписанию (каждые 30 минут) с учётом лимита запросов.
+- `worker/src/money.js` — суммы BIST хранятся в 1/10000, показываются с одним знаком после запятой.
 - `worker/migrations/` — миграции базы D1.
 - `webapp/` — интерфейс (подстраивается под тему Telegram).
 - `worker/test/` — тесты (`npm test`, Node 22+, база в тестах — встроенный `node:sqlite`).

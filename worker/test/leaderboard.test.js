@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import { history, leaderboard, moscowDay, periodStart, takeSnapshot, userStats } from "../src/leaderboard.js";
 import { addTransaction } from "../src/users.js";
+import { UNIT } from "../src/money.js";
 import { createDb } from "./fake-d1.js";
 
 // Среда, 28 октября 2026, 12:00 по Москве
@@ -12,11 +13,11 @@ const DAY = 86400;
 function seed(db, users) {
   for (const [id, createdAt, name] of users) {
     db.raw.prepare("INSERT INTO users (id, first_name, created_at) VALUES (?, ?, ?)").run(id, name, createdAt);
-    db.raw.prepare("INSERT INTO transactions (user_id, amount, type, created_at) VALUES (?, 10, 'signup_bonus', ?)").run(id, createdAt);
+    db.raw.prepare("INSERT INTO transactions (user_id, amount, type, created_at) VALUES (?, ?, 'signup_bonus', ?)").run(id, 10 * UNIT, createdAt);
   }
 }
 const tx = (db, userId, amount, at, type = "quiz_reward") =>
-  db.raw.prepare("INSERT INTO transactions (user_id, amount, type, created_at) VALUES (?, ?, ?, ?)").run(userId, amount, type, at);
+  db.raw.prepare("INSERT INTO transactions (user_id, amount, type, created_at) VALUES (?, ?, ?, ?)").run(userId, amount * UNIT, type, at);
 
 test("начало недели и месяца по Москве", () => {
   assert.equal(periodStart("week", NOW), Date.UTC(2026, 9, 25, 21) / 1000); // пн 26.10 00:00 МСК
@@ -83,7 +84,7 @@ test("снимок рейтинга: изменение места за сутк
 test("статистика и история операций сходятся с балансом", async () => {
   const db = createDb();
   seed(db, [[7, NOW, "A"]]);
-  for (let i = 0; i < 34; i++) await addTransaction(db, { userId: 7, amount: i % 2 ? -1 : 2, type: "quiz_reward" });
+  for (let i = 0; i < 34; i++) await addTransaction(db, { userId: 7, amount: (i % 2 ? -1 : 2) * UNIT, type: "quiz_reward" });
   const stats = await userStats(db, 7);
   assert.deepEqual(stats, { earned: 10 + 17 * 2, spent: 17 });
 

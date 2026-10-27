@@ -9,6 +9,8 @@ let adminTarget = null;
 let boardPeriod = "all";
 let historyNext = undefined; // undefined — ещё не грузили, null — больше нет
 let historyLoading = false;
+let clockSkew = 0;
+const serverNow = () => Date.now() / 1000 + clockSkew;
 
 const TX_LABELS = {
   signup_bonus: "Бонус за регистрацию",
@@ -17,6 +19,7 @@ const TX_LABELS = {
   bet: "Прогноз",
   payout: "Выигрыш по прогнозу",
   refund: "Возврат",
+  payout_reversal: "Отмена выигрыша (исправление счёта)",
 };
 
 function plural(n, one, few, many) {
@@ -53,7 +56,9 @@ async function api(path, options = {}) {
     headers: { "Content-Type": "application/json", "X-Telegram-Init-Data": tg?.initData || "" },
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || "Ошибка сервера");
+  if (!res.ok) throw Object.assign(new Error(data.error || "Ошибка сервера"), { data });
+  // Сервер присылает своё время, чтобы таймер ожидания не зависел от часов телефона
+  if (typeof data.now === "number") clockSkew = data.now - Date.now() / 1000;
   return data;
 }
 
@@ -71,14 +76,7 @@ function showMsg(el, text, ok) {
 function openTab(name) {
   for (const t of TABS) $(`tab-${t}`).classList.toggle("hidden", t !== name);
   if (name === "table") loadBoard();
-  document.querySelectorAll(".segmented button").forEach((b) => (b.onclick = () => {
-    boardPeriod = b.dataset.period;
-    document.querySelectorAll(".segmented button").forEach((x) => x.classList.toggle("active", x === b));
-    loadBoard();
-  }));
-  // Подгрузка истории при прокрутке до конца списка
-  new IntersectionObserver(([e]) => e.isIntersecting && loadHistory()).observe($("history-more"));
-  loadHistory();
+  if (name === "predictions") loadPredictionsTab();
   document.querySelectorAll("#nav button").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
   try { localStorage.setItem("tots_tab", name); } catch {}
 }
@@ -97,18 +95,23 @@ function renderProfile() {
   } else {
     avatar.textContent = (me.name || "?").trim().charAt(0).toUpperCase();
   }
-  $("balance").textContent = me.balance;
-  $("chip-balance").textContent = me.balance;
+  $("balance").textContent = fmt(me.balance);
+  $("chip-balance").textContent = fmt(me.balance);
   $("tenure").textContent = `Стаж ${tenure(me.registered_at)}`;
   $("tenure").title = `В TOTS с ${formatDate(me.registered_at)}`;
   if (me.stats) {
-    $("stat-earned").textContent = `+${me.stats.earned}`;
-    $("stat-spent").textContent = `−${me.stats.spent}`;
+    $("stat-earned").textContent = `+${fmt(me.stats.earned)}`;
+    $("stat-spent").textContent = `−${fmt(me.stats.spent)}`;
   }
 }
 
+// BIST показываем с одним знаком после запятой, лишние знаки отбрасываем: 19.37 → 19.3
+function fmt(n) {
+  return (Math.trunc(Math.round((n || 0) * 1e4) / 1e3) / 10).toFixed(1);
+}
+
 function signed(n) {
-  return n > 0 ? `+${n}` : n < 0 ? `−${-n}` : "0";
+  return n > 0 ? `+${fmt(n)}` : n < 0 ? `−${fmt(-n)}` : fmt(0);
 }
 
 function avatarEl(user, extra = "") {
@@ -132,7 +135,7 @@ function boardRow(r) {
   who.textContent = r.name;
   const score = document.createElement("span");
   score.className = "score";
-  score.textContent = boardPeriod === "all" ? r.score : signed(r.score);
+  score.textContent = boardPeriod === "all" ? fmt(r.score) : signed(r.score);
   const chg = document.createElement("span");
   chg.className = "chg";
   if (r.change > 0) { chg.textContent = `▲${r.change}`; chg.classList.add("plus"); }
@@ -187,15 +190,15 @@ function fillUser(u) {
   $("u-avatar").textContent = ava.textContent;
   $("u-name").textContent = u.name;
   if (u.rank != null) $("u-rank").textContent = u.rank;
-  if (u.balance != null) $("u-balance").textContent = u.balance;
+  if (u.balance != null) $("u-balance").textContent = fmt(u.balance);
   if ("username" in u) {
     $("u-username").textContent = u.username ? "@" + u.username : "";
     $("u-username").href = u.username ? `https://t.me/${encodeURIComponent(u.username)}` : "";
   }
   if (u.registered_at) $("u-tenure").textContent = `Стаж ${tenure(u.registered_at)}`;
   if (u.stats) {
-    $("u-earned").textContent = `+${u.stats.earned}`;
-    $("u-spent").textContent = `−${u.stats.spent}`;
+    $("u-earned").textContent = `+${fmt(u.stats.earned)}`;
+    $("u-spent").textContent = `−${fmt(u.stats.spent)}`;
   }
 }
 
@@ -281,6 +284,12 @@ function appendHistory(list, items) {
     li.className = "hist";
     const label = document.createElement("span");
     label.textContent = TX_LABELS[t.type] || t.type;
+    if (t.match) {
+      const sub = document.createElement("span");
+      sub.className = "reason";
+      sub.textContent = `${t.match} · ${outcomeLabel(t.market, t.outcome)}`;
+      label.appendChild(sub);
+    }
     if (t.reason) {
       const reason = document.createElement("span");
       reason.className = "reason";
@@ -365,12 +374,12 @@ async function adminSearch() {
       const label = document.createElement("span");
       label.textContent = `${u.name}${u.username ? " · @" + u.username : ""} · ${u.id}`;
       const bal = document.createElement("b");
-      bal.textContent = `${u.balance} BIST`;
+      bal.textContent = `${fmt(u.balance)} BIST`;
       li.append(label, bal);
       li.onclick = () => {
         adminTarget = u;
         list.querySelectorAll("li").forEach((el) => el.classList.toggle("active", el === li));
-        $("admin-target").textContent = `${u.name}: ${u.balance} BIST`;
+        $("admin-target").textContent = `${u.name}: ${fmt(u.balance)} BIST`;
         $("admin-form").classList.remove("hidden");
         $("admin-msg").classList.add("hidden");
       };
@@ -395,7 +404,7 @@ async function adminApply() {
       body: JSON.stringify({ user_id: adminTarget.id, amount: Number($("admin-amount").value), reason: $("admin-reason").value }),
     });
     adminTarget = res.user;
-    $("admin-target").textContent = `${res.user.name}: ${res.user.balance} BIST`;
+    $("admin-target").textContent = `${res.user.name}: ${fmt(res.user.balance)} BIST`;
     $("admin-amount").value = "";
     $("admin-reason").value = "";
     showMsg($("admin-msg"), "Баланс изменён и записан в журнал", true);
@@ -420,15 +429,503 @@ async function loadAudit() {
     list.innerHTML = entries.length ? "" : '<li class="muted">Пока пусто</li>';
     for (const e of entries) {
       const li = document.createElement("li");
-      const sign = e.after.amount > 0 ? "+" : "";
+      if (e.action === "match_result") {
+        li.textContent =
+          `${new Date(e.created_at * 1000).toLocaleString("ru-RU")} · ${e.after.match}: счёт ${e.before.score.join(":")} → ` +
+          `${e.after.score.join(":")}, прогнозы пересчитаны · «${e.reason}» · админ ${e.admin_id}`;
+        list.appendChild(li);
+        continue;
+      }
       li.textContent =
-        `${new Date(e.created_at * 1000).toLocaleString("ru-RU")} · ${e.target_name}: ${sign}${e.after.amount} BIST ` +
-        `(${e.before.balance} → ${e.after.balance}) · «${e.reason}» · админ ${e.admin_id}`;
+        `${new Date(e.created_at * 1000).toLocaleString("ru-RU")} · ${e.target_name}: ${signed(e.after.amount)} BIST ` +
+        `(${fmt(e.before.balance)} → ${fmt(e.after.balance)}) · «${e.reason}» · админ ${e.admin_id}`;
       list.appendChild(li);
     }
   } catch (e) {
     list.innerHTML = "";
   }
+}
+
+// --- прогнозы ---
+
+const COMMISSION = { "1x2": 7, score: 10 };
+const STAKE_MIN = 1;
+const STAKE_MAX = 100;
+let predTournament = "";
+let predView = "matches";
+let mineScope = "active";
+let mineNext;
+let matchesCache = [];
+let bet = null; // открытое окно прогноза: { match, market, outcome }
+let betTimer = null;
+
+function outcomeLabel(market, outcome) {
+  if (market === "score") return `счёт ${outcome}`;
+  return { 1: "П1", X: "Ничья", 2: "П2" }[outcome] || outcome;
+}
+
+// Та же формула, что на сервере: ставка + ставка × (коэффициент − 1) × (1 − комиссия)
+function payoutOf(stake, price, market) {
+  const units = stake * 10000;
+  const cents = Math.round(price * 100);
+  return (units + Math.floor((units * (cents - 100) * (100 - COMMISSION[market])) / 10000)) / 10000;
+}
+
+function kickoff(ts) {
+  return new Date(ts * 1000).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+}
+
+function dayLabel(ts) {
+  const d = new Date(ts * 1000);
+  const today = new Date();
+  const diff = Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()) - new Date(today.getFullYear(), today.getMonth(), today.getDate())) / 86400000);
+  if (diff === 0) return "Сегодня";
+  if (diff === 1) return "Завтра";
+  if (diff === -1) return "Вчера";
+  return d.toLocaleDateString("ru-RU", { weekday: "short", day: "numeric", month: "long" });
+}
+
+// Почему прогноз сейчас не принимается
+function closedNote(m) {
+  if (m.status === "finished") return null;
+  if (m.status === "cancelled") return "Матч отменён, прогнозы возвращены";
+  if (m.status === "postponed") return "Матч перенесён, приём прогнозов закрыт";
+  if (m.start_time <= serverNow()) return "Матч идёт, ждём результат";
+  return "Приём прогнозов закрыт: нет свежих коэффициентов";
+}
+
+function predLine(p) {
+  const what = `${outcomeLabel(p.market, p.outcome)} · ${fmt(p.stake)} BIST × ${p.price.toFixed(2)}`;
+  if (p.status === "won") return `✅ ${what} · выигрыш ${fmt(p.payout)}`;
+  if (p.status === "lost") return `❌ ${what} · не сыграл`;
+  if (p.status === "refunded") return `↩️ ${what} · возврат`;
+  return `🎯 ${what} · возможная выплата ${fmt(p.payout)}`;
+}
+
+function matchCard(m) {
+  const card = document.createElement("div");
+  card.className = "card match";
+  const top = document.createElement("div");
+  top.className = "match-top";
+  top.innerHTML = "<span></span><span></span>";
+  top.children[0].textContent = m.tournament_name;
+  top.children[1].textContent = m.status === "finished" ? "Завершён" : kickoff(m.start_time);
+  const teams = document.createElement("div");
+  teams.className = "match-teams";
+  teams.innerHTML = "<span></span>";
+  teams.firstChild.textContent = `${m.home} — ${m.away}`;
+  if (m.score) {
+    const sc = document.createElement("span");
+    sc.className = "score";
+    sc.textContent = m.score.join(" : ");
+    teams.appendChild(sc);
+  }
+  teams.onclick = () => openBet(m, "1x2");
+  card.append(top, teams);
+
+  const mine1x2 = m.my.find((p) => p.market === "1x2");
+  if (Object.keys(m.odds).length || m.has_score) {
+    const odds = document.createElement("div");
+    odds.className = "odds";
+    for (const o of ["1", "X", "2"]) {
+      if (!m.odds[o]) continue;
+      const b = document.createElement("button");
+      b.className = "odd";
+      if (mine1x2?.outcome === o) b.classList.add(mine1x2.status === "won" ? "won" : mine1x2.status === "lost" ? "lost" : "mine");
+      b.innerHTML = "<small></small><span></span>";
+      b.firstChild.textContent = outcomeLabel("1x2", o);
+      b.lastChild.textContent = m.odds[o].toFixed(2);
+      b.disabled = !m.open;
+      b.onclick = () => openBet(m, "1x2", o);
+      odds.appendChild(b);
+    }
+    if (m.has_score) {
+      const b = document.createElement("button");
+      b.className = "odd more";
+      if (m.my.some((p) => p.market === "score")) b.classList.add("mine");
+      b.innerHTML = "<small>Точный</small><span>счёт</span>";
+      b.disabled = !m.open;
+      b.onclick = () => openBet(m, "score");
+      odds.appendChild(b);
+    }
+    card.appendChild(odds);
+  }
+  if (!m.open) {
+    const note = closedNote(m);
+    if (note) {
+      const el = document.createElement("div");
+      el.className = "match-note";
+      el.textContent = note;
+      card.appendChild(el);
+    }
+  }
+  for (const p of m.my) {
+    const el = document.createElement("div");
+    el.className = "my-pred";
+    el.textContent = predLine(p);
+    card.appendChild(el);
+  }
+  return card;
+}
+
+function renderChips(tournaments) {
+  const box = $("t-chips");
+  if (box.children.length) return;
+  for (const t of [{ code: "", name: "Все" }, ...tournaments]) {
+    const b = document.createElement("button");
+    b.textContent = t.name;
+    b.dataset.code = t.code;
+    b.classList.toggle("active", t.code === predTournament);
+    b.onclick = () => {
+      predTournament = t.code;
+      box.querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === b));
+      try { localStorage.setItem("tots_tournament", t.code); } catch {}
+      loadMatches();
+    };
+    box.appendChild(b);
+  }
+}
+
+async function loadMatches() {
+  const t = predTournament;
+  const list = $("match-list");
+  try {
+    const data = await api(`/api/matches${t ? `?t=${t}` : ""}`);
+    if (t !== predTournament) return;
+    renderChips(data.tournaments);
+    matchesCache = data.matches;
+    list.innerHTML = "";
+    const now = serverNow();
+    // Сначала ближайшие матчи по порядку, потом прошедшие — свежие сверху
+    const upcoming = data.matches.filter((m) => m.status !== "finished" && m.status !== "cancelled" && m.start_time > now - 3 * 3600);
+    const past = data.matches.filter((m) => !upcoming.includes(m)).reverse();
+    if (!data.matches.length) {
+      list.innerHTML = '<div class="card muted">Матчей на ближайшие две недели пока нет. Расписание обновляется автоматически.</div>';
+      return;
+    }
+    let day = null;
+    for (const m of upcoming) {
+      const label = dayLabel(m.start_time);
+      if (label !== day) {
+        day = label;
+        const h = document.createElement("div");
+        h.className = "day";
+        h.textContent = label;
+        list.appendChild(h);
+      }
+      list.appendChild(matchCard(m));
+    }
+    if (past.length) {
+      const h = document.createElement("div");
+      h.className = "day";
+      h.textContent = "Прошедшие";
+      list.appendChild(h);
+      for (const m of past) list.appendChild(matchCard(m));
+    }
+  } catch (e) {
+    list.innerHTML = "";
+    const el = document.createElement("div");
+    el.className = "card error";
+    el.textContent = e.message;
+    list.appendChild(el);
+  }
+}
+
+async function loadMine(reset = false) {
+  const list = $("mine-list");
+  if (reset) {
+    list.innerHTML = "";
+    mineNext = undefined;
+  }
+  const scope = mineScope;
+  try {
+    const data = await api(`/api/predictions?scope=${scope}${mineNext ? `&before=${mineNext}` : ""}`);
+    if (scope !== mineScope) return;
+    for (const p of data.items) {
+      const li = document.createElement("li");
+      li.className = "hist pred-item";
+      const label = document.createElement("span");
+      label.textContent = `${p.match.home} — ${p.match.away}`;
+      const sub = document.createElement("span");
+      sub.className = "hist-sub";
+      sub.textContent = predLine(p);
+      const when = document.createElement("span");
+      when.className = "when";
+      when.textContent = `${p.match.tournament_name} · ${dayLabel(p.match.start_time)}, ${kickoff(p.match.start_time)}` +
+        (p.match.score ? ` · ${p.match.score.join(":")}` : "");
+      label.append(sub, when);
+      li.appendChild(label);
+      li.onclick = () => openBet({ ...p.match, my: [] }, p.market);
+      list.appendChild(li);
+    }
+    mineNext = data.next;
+    if (!list.children.length) {
+      list.innerHTML = `<li class="muted">${scope === "active" ? "Активных прогнозов нет. Выберите матч во вкладке «Матчи»." : "Пока нет завершённых прогнозов"}</li>`;
+    }
+    $("mine-more").classList.toggle("hidden", data.next === null);
+  } catch (e) {
+    list.innerHTML = "";
+    const li = document.createElement("li");
+    li.className = "muted";
+    li.textContent = e.message;
+    list.appendChild(li);
+  }
+}
+
+function loadPredictionsTab() {
+  if (predView === "matches") loadMatches();
+  else loadMine(true);
+}
+
+// --- окно прогноза ---
+
+async function openBet(match, market, outcome = null) {
+  bet = { match: { ...match, odds: { "1x2": {}, score: {} } }, market, outcome, loading: true };
+  $("bet-msg").classList.add("hidden");
+  $("fix-msg").classList.add("hidden");
+  $("bet-stake").value = "";
+  for (const f of ["fix-home", "fix-away", "fix-reason"]) $(f).value = "";
+  renderBet();
+  $("bet-dialog").classList.remove("hidden");
+  try {
+    const full = await api(`/api/matches/${match.id}`);
+    if (bet?.match.id !== match.id) return;
+    bet.match = full;
+    bet.loading = false;
+    const current = full.my.find((p) => p.market === bet.market && p.status === "active");
+    if (current && !bet.outcome) bet.outcome = current.outcome;
+    if (current && !$("bet-stake").value) $("bet-stake").value = current.stake;
+    renderBet();
+  } catch (e) {
+    bet.loading = false;
+    showMsg($("bet-msg"), e.message, false);
+  }
+}
+
+function closeBet() {
+  $("bet-dialog").classList.add("hidden");
+  clearInterval(betTimer);
+  bet = null;
+}
+
+function renderBet() {
+  const m = bet.match;
+  $("bet-title").textContent = `${m.home} — ${m.away}`;
+  $("bet-sub").textContent = `${m.tournament_name} · ${dayLabel(m.start_time)}, ${kickoff(m.start_time)}`;
+  const state = $("bet-state");
+  const note = m.score ? `Итог основного времени: ${m.score.join(" : ")}` : m.open ? null : closedNote(m);
+  state.textContent = note || "";
+  state.classList.toggle("hidden", !note);
+  document.querySelectorAll("#bet-markets button").forEach((b) => b.classList.toggle("active", b.dataset.market === bet.market));
+
+  const odds = m.odds[bet.market] || {};
+  const box = $("bet-outcomes");
+  box.innerHTML = "";
+  box.classList.toggle("grid", bet.market === "score");
+  const keys = bet.market === "1x2" ? ["1", "X", "2"].filter((o) => odds[o]) : scoreColumns(Object.keys(odds));
+  if (bet.market === "score" && keys.length) {
+    for (const h of ["Победа хозяев", "Ничья", "Победа гостей"]) {
+      const el = document.createElement("div");
+      el.className = "muted small grid-head";
+      el.textContent = h;
+      box.appendChild(el);
+    }
+  }
+  for (const o of keys) {
+    if (!o) { box.appendChild(document.createElement("span")); continue; }
+    const b = document.createElement("button");
+    b.className = "odd";
+    b.classList.toggle("picked", o === bet.outcome);
+    b.innerHTML = "<small></small><span></span>";
+    b.firstChild.textContent = bet.market === "1x2" ? outcomeLabel("1x2", o) : o;
+    b.lastChild.textContent = odds[o].toFixed(2);
+    b.disabled = !m.open;
+    b.onclick = () => { bet.outcome = o; renderBet(); };
+    box.appendChild(b);
+  }
+  if (!keys.length) box.innerHTML = `<div class="muted small">${bet.loading ? "Загрузка…" : "Коэффициентов на этот рынок нет"}</div>`;
+
+  const current = m.my.find((p) => p.market === bet.market && p.status === "active");
+  const settled = m.my.filter((p) => p.market === bet.market && p.status !== "active");
+  const cur = $("bet-current");
+  const lines = [...(current ? [`Ваш прогноз: ${predLine(current)}`] : []), ...settled.map(predLine)];
+  cur.textContent = lines.join("\n");
+  cur.style.whiteSpace = "pre-line";
+  cur.classList.toggle("hidden", !lines.length);
+
+  $("bet-form").classList.toggle("hidden", !m.open || !bet.outcome);
+  $("bet-cancel").classList.toggle("hidden", !m.open || !current);
+  $("bet-submit").textContent = current ? "Заменить прогноз" : "Сделать прогноз";
+  updatePayout();
+  tickCooldown();
+  clearInterval(betTimer);
+  if (current && current.next_change_at > serverNow()) betTimer = setInterval(tickCooldown, 1000);
+
+  const admin = me.is_admin && m.status === "finished";
+  $("bet-admin").classList.toggle("hidden", !admin);
+  if (admin && m.score && !$("fix-home").value && !$("fix-away").value) {
+    $("fix-home").value = m.score[0];
+    $("fix-away").value = m.score[1];
+  }
+}
+
+// Сетка точного счёта в три колонки: победа хозяев, ничья, победа гостей; пустые места — null
+function scoreColumns(scores) {
+  const goals = (s) => s.split(":").map(Number);
+  const byTotal = (a, b) => {
+    const [ah, aa] = goals(a);
+    const [bh, ba] = goals(b);
+    return ah + aa - (bh + ba) || Math.abs(ah - aa) - Math.abs(bh - ba);
+  };
+  const cols = [
+    scores.filter((s) => goals(s)[0] > goals(s)[1]).sort(byTotal),
+    scores.filter((s) => goals(s)[0] === goals(s)[1]).sort(byTotal),
+    scores.filter((s) => goals(s)[0] < goals(s)[1]).sort(byTotal),
+  ];
+  const rows = Math.max(...cols.map((c) => c.length));
+  const cells = [];
+  for (let i = 0; i < rows; i++) for (const c of cols) cells.push(c[i] || null);
+  return cells;
+}
+
+function updatePayout() {
+  if (!bet?.outcome) return;
+  const price = bet.match.odds[bet.market]?.[bet.outcome];
+  const stake = Number($("bet-stake").value);
+  const el = $("bet-payout");
+  if (!price) { el.textContent = ""; return; }
+  if (!Number.isInteger(stake) || stake < STAKE_MIN || stake > STAKE_MAX) {
+    el.textContent = `${outcomeLabel(bet.market, bet.outcome)} × ${price.toFixed(2)} · ставка от ${STAKE_MIN} до ${STAKE_MAX} BIST, целым числом`;
+    return;
+  }
+  const payout = payoutOf(stake, price, bet.market);
+  el.textContent = `${outcomeLabel(bet.market, bet.outcome)} × ${price.toFixed(2)} · при выигрыше получите ${fmt(payout)} BIST (+${fmt(payout - stake)})`;
+}
+
+// Пока идёт пауза после прошлого действия, кнопки показывают обратный отсчёт
+function tickCooldown() {
+  const current = bet?.match.my.find((p) => p.market === bet.market && p.status === "active");
+  const wait = current ? Math.ceil(current.next_change_at - serverNow()) : 0;
+  const submit = $("bet-submit");
+  const cancel = $("bet-cancel");
+  if (wait > 0) {
+    const t = `${Math.floor(wait / 60)}:${String(wait % 60).padStart(2, "0")}`;
+    submit.disabled = cancel.disabled = true;
+    submit.textContent = `Заменить можно через ${t}`;
+    cancel.textContent = `Отменить можно через ${t}`;
+  } else {
+    clearInterval(betTimer);
+    submit.disabled = cancel.disabled = false;
+    submit.textContent = current ? "Заменить прогноз" : "Сделать прогноз";
+    cancel.textContent = "Отменить прогноз";
+  }
+}
+
+async function afterBetChange(balance) {
+  me.balance = balance;
+  renderProfile();
+  resetHistory();
+  tg?.HapticFeedback?.notificationOccurred("success");
+  if (bet) {
+    const id = bet.match.id;
+    const full = await api(`/api/matches/${id}`).catch(() => null);
+    if (full && bet?.match.id === id) { bet.match = full; renderBet(); }
+  }
+  loadPredictionsTab();
+}
+
+async function submitBet() {
+  const btn = $("bet-submit");
+  btn.disabled = true;
+  try {
+    const res = await api("/api/predictions", {
+      method: "POST",
+      body: JSON.stringify({ match_id: bet.match.id, market: bet.market, outcome: bet.outcome, stake: Number($("bet-stake").value) }),
+    });
+    showMsg($("bet-msg"), res.replaced ? "Прогноз заменён, прошлая ставка вернулась на баланс" : "Прогноз принят", true);
+    await afterBetChange(res.balance);
+  } catch (e) {
+    showMsg($("bet-msg"), e.message, false);
+    btn.disabled = false;
+  }
+}
+
+async function cancelBet() {
+  const current = bet.match.my.find((p) => p.market === bet.market && p.status === "active");
+  if (!current) return;
+  const btn = $("bet-cancel");
+  btn.disabled = true;
+  try {
+    const res = await api(`/api/predictions/${current.id}/cancel`, { method: "POST" });
+    showMsg($("bet-msg"), "Прогноз отменён, ставка вернулась на баланс", true);
+    bet.outcome = null;
+    $("bet-stake").value = "";
+    await afterBetChange(res.balance);
+  } catch (e) {
+    showMsg($("bet-msg"), e.message, false);
+    btn.disabled = false;
+  }
+}
+
+async function fixResult() {
+  const btn = $("fix-apply");
+  btn.disabled = true;
+  try {
+    const id = bet.match.id;
+    await api(`/api/admin/matches/${id}/result`, {
+      method: "POST",
+      body: JSON.stringify({ home: Number($("fix-home").value), away: Number($("fix-away").value), reason: $("fix-reason").value }),
+    });
+    $("fix-reason").value = "";
+    showMsg($("fix-msg"), "Счёт исправлен, прогнозы пересчитаны и записаны в журнал", true);
+    me = { ...me, ...(await api("/api/me")) };
+    renderProfile();
+    resetHistory();
+    loadAudit();
+    const full = await api(`/api/matches/${id}`);
+    if (bet?.match.id === id) { bet.match = full; renderBet(); }
+    loadPredictionsTab();
+  } catch (e) {
+    showMsg($("fix-msg"), e.message, false);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function initPredictions() {
+  try { predTournament = localStorage.getItem("tots_tournament") || ""; } catch {}
+  document.querySelectorAll("#pred-view button").forEach((b) => (b.onclick = () => {
+    predView = b.dataset.view;
+    document.querySelectorAll("#pred-view button").forEach((x) => x.classList.toggle("active", x === b));
+    $("pred-matches").classList.toggle("hidden", predView !== "matches");
+    $("pred-mine").classList.toggle("hidden", predView !== "mine");
+    loadPredictionsTab();
+  }));
+  document.querySelectorAll("#mine-scope button").forEach((b) => (b.onclick = () => {
+    mineScope = b.dataset.scope;
+    document.querySelectorAll("#mine-scope button").forEach((x) => x.classList.toggle("active", x === b));
+    loadMine(true);
+  }));
+  $("mine-more").onclick = () => loadMine();
+  document.querySelectorAll("#bet-markets button").forEach((b) => (b.onclick = () => {
+    if (bet.market === b.dataset.market) return;
+    bet.market = b.dataset.market;
+    const current = bet.match.my.find((p) => p.market === bet.market && p.status === "active");
+    bet.outcome = current?.outcome || null;
+    $("bet-stake").value = current ? current.stake : "";
+    $("bet-msg").classList.add("hidden");
+    renderBet();
+  }));
+  document.querySelectorAll(".quick button").forEach((b) => (b.onclick = () => {
+    $("bet-stake").value = b.dataset.stake;
+    updatePayout();
+  }));
+  $("bet-stake").addEventListener("input", updatePayout);
+  $("bet-submit").onclick = submitBet;
+  $("bet-cancel").onclick = cancelBet;
+  $("fix-apply").onclick = fixResult;
+  $("bet-close").onclick = closeBet;
+  $("bet-dialog").addEventListener("click", (e) => e.target === e.currentTarget && closeBet());
 }
 
 // --- запуск ---
@@ -462,7 +959,7 @@ async function init() {
   }
   renderProfile();
   if (me.is_new) {
-    $("welcome").textContent = `🎉 Добро пожаловать! Вам начислено ${me.balance} BIST.`;
+    $("welcome").textContent = `🎉 Добро пожаловать! Вам начислено ${fmt(me.balance)} BIST.`;
     $("welcome").classList.remove("hidden");
     tg.HapticFeedback?.notificationOccurred("success");
   }
@@ -483,11 +980,12 @@ async function init() {
     $("u-more").onclick = loadUserHistory;
     loadAudit();
   }
-  document.querySelectorAll(".segmented button").forEach((b) => (b.onclick = () => {
+  document.querySelectorAll("#tab-table .segmented button").forEach((b) => (b.onclick = () => {
     boardPeriod = b.dataset.period;
-    document.querySelectorAll(".segmented button").forEach((x) => x.classList.toggle("active", x === b));
+    document.querySelectorAll("#tab-table .segmented button").forEach((x) => x.classList.toggle("active", x === b));
     loadBoard();
   }));
+  initPredictions();
   // Подгрузка истории при прокрутке до конца списка
   new IntersectionObserver(([e]) => e.isIntersecting && loadHistory()).observe($("history-more"));
   loadHistory();

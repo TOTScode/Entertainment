@@ -5,10 +5,17 @@
 import { safeEqual, validateInitData, webhookSecret } from "./auth.js";
 import { handleAdmin, isAdmin } from "./admin.js";
 import { handleUpdate } from "./bot.js";
+import { toBist } from "./money.js";
+import {
+  cancelPrediction, getMatch, listMatches, myPredictions, placePrediction, PredictionError,
+} from "./predictions.js";
+import { sync } from "./sync.js";
 import { history, leaderboard, publicProfile, takeSnapshot } from "./leaderboard.js";
 import { displayName, getUser, registerOrUpdate, setNickname, telegramName, validateNickname, yearsSince } from "./users.js";
 
 export { validateInitData, webhookSecret } from "./auth.js";
+
+export const SNAPSHOT_CRON = "1 21 * * *";
 
 const json = (data, status = 200) =>
   new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json; charset=utf-8" } });
@@ -21,7 +28,7 @@ function profile(user, env, isNew) {
     telegram_name: telegramName(user),
     username: user.username,
     photo_url: user.photo_url,
-    balance: user.balance,
+    balance: toBist(user.balance),
     registered_at: user.created_at,
     years_in_tots: yearsSince(user.created_at),
     is_new: isNew,
@@ -37,7 +44,7 @@ async function handleApi(request, env, path) {
   // Остальным запросам достаточно ID из проверенной подписи: так меньше обращений к базе.
   if (path === "/api/me" && request.method === "GET") {
     const [user, isNew] = await registerOrUpdate(env.DB, tgUser, Number(env.START_BALANCE || 10));
-    return json({ ...profile(user, env, isNew), stats: { earned: user.earned, spent: user.spent } });
+    return json({ ...profile(user, env, isNew), stats: { earned: toBist(user.earned), spent: toBist(user.spent) } });
   }
   const user = { id: tgUser.id };
 
@@ -67,6 +74,33 @@ async function handleApi(request, env, path) {
     return json(target);
   }
 
+  // --- прогнозы ---
+  const now = Math.floor(Date.now() / 1000);
+  try {
+    if (path === "/api/matches" && request.method === "GET") {
+      return json(await listMatches(env.DB, user.id, { tournament: params.get("t"), now }));
+    }
+    const matchPath = /^\/api\/matches\/(\d+)$/.exec(path);
+    if (matchPath && request.method === "GET") {
+      const m = await getMatch(env.DB, user.id, Number(matchPath[1]), now);
+      return m ? json(m) : json({ error: "Матч не найден" }, 404);
+    }
+    if (path === "/api/predictions" && request.method === "GET") {
+      return json(await myPredictions(env.DB, user.id, { scope: params.get("scope"), before: params.get("before"), now }));
+    }
+    if (path === "/api/predictions" && request.method === "POST") {
+      const body = await request.json().catch(() => ({}));
+      return json(await placePrediction(env.DB, user.id, body, now));
+    }
+    const cancelPath = /^\/api\/predictions\/(\d+)\/cancel$/.exec(path);
+    if (cancelPath && request.method === "POST") {
+      return json(await cancelPrediction(env.DB, user.id, Number(cancelPath[1]), now));
+    }
+  } catch (e) {
+    if (e instanceof PredictionError) return json({ error: e.message, ...e.extra }, e.status);
+    throw e;
+  }
+
   if (path === "/api/history" && request.method === "GET") {
     return json(await history(env.DB, user.id, { before: params.get("before") }));
   }
@@ -94,8 +128,10 @@ export default {
     return env.ASSETS.fetch(request);
   },
 
-  // Cron Trigger из wrangler.toml: снимок рейтинга в начале каждого дня по Москве
+  // Cron Triggers из wrangler.toml: снимок рейтинга в начале дня по Москве и синхронизация матчей раз в 30 минут
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(takeSnapshot(env.DB, Math.floor(event.scheduledTime / 1000)));
+    const now = Math.floor(event.scheduledTime / 1000);
+    if (event.cron === SNAPSHOT_CRON) ctx.waitUntil(takeSnapshot(env.DB, now));
+    else ctx.waitUntil(sync(env, now));
   },
 };

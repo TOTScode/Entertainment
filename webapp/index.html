@@ -28,10 +28,21 @@
 
     <!-- Прогнозы -->
     <section id="tab-predictions" class="tab hidden">
-      <div class="card soon">
-        <div class="soon-icon">⚽️</div>
-        <h2>Прогнозы</h2>
-        <p class="muted">Скоро: прогнозы на матчи топ-лиг, ЧМ и Евро.</p>
+      <div id="pred-view" class="segmented">
+        <button data-view="matches" class="active">Матчи</button>
+        <button data-view="mine">Мои прогнозы</button>
+      </div>
+      <div id="pred-matches">
+        <div id="t-chips" class="chips"></div>
+        <div id="match-list"><div class="card muted">Загрузка…</div></div>
+      </div>
+      <div id="pred-mine" class="hidden">
+        <div id="mine-scope" class="segmented">
+          <button data-scope="active" class="active">Активные</button>
+          <button data-scope="settled">Завершённые</button>
+        </div>
+        <div class="card"><ul id="mine-list" class="list"></ul></div>
+        <button id="mine-more" class="btn wide ghost hidden">Показать ещё</button>
       </div>
     </section>
 
@@ -84,7 +95,7 @@
 
         <div id="admin-form" class="admin-form hidden">
           <div id="admin-target" class="name small-name"></div>
-          <input id="admin-amount" class="input" type="number" step="1" placeholder="Сумма: +25 или -10">
+          <input id="admin-amount" class="input" type="number" step="0.1" inputmode="decimal" placeholder="Сумма: +25 или -2.5">
           <input id="admin-reason" class="input" maxlength="200" placeholder="Причина (обязательно)">
           <button id="admin-apply" class="btn">Изменить баланс</button>
           <div id="admin-msg" class="msg hidden"></div>
@@ -142,13 +153,56 @@
       <div id="u-admin" class="u-admin hidden">
         <h3>🛠 Админка</h3>
         <div class="muted small">Telegram ID: <span id="u-id"></span></div>
-        <input id="u-amount" class="input" type="number" step="1" placeholder="Сумма: +25 или -10">
+        <input id="u-amount" class="input" type="number" step="0.1" inputmode="decimal" placeholder="Сумма: +25 или -2.5">
         <input id="u-reason" class="input" maxlength="200" placeholder="Причина (обязательно)">
         <button id="u-apply" class="btn wide">Изменить баланс</button>
         <div id="u-msg" class="msg hidden"></div>
         <h3 class="mt">История операций</h3>
         <ul id="u-history" class="list"></ul>
         <button id="u-more" class="btn wide ghost hidden">Показать ещё</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Прогноз на матч -->
+  <div id="bet-dialog" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="bet-title">
+    <div class="sheet">
+      <div class="sheet-head">
+        <h3 id="bet-title"></h3>
+        <button id="bet-close" class="icon-btn" aria-label="Закрыть">✕</button>
+      </div>
+      <div id="bet-sub" class="muted small"></div>
+      <div id="bet-state" class="bet-state hidden"></div>
+      <div id="bet-markets" class="segmented">
+        <button data-market="1x2" class="active">Исход</button>
+        <button data-market="score">Точный счёт</button>
+      </div>
+      <div id="bet-outcomes" class="outcomes"></div>
+      <div id="bet-current" class="bet-current hidden"></div>
+      <div id="bet-form" class="hidden">
+        <div class="stake-row">
+          <input id="bet-stake" class="input" type="number" min="1" max="100" step="1" inputmode="numeric" placeholder="Ставка, BIST">
+          <div class="quick">
+            <button data-stake="5">5</button><button data-stake="10">10</button><button data-stake="25">25</button><button data-stake="50">50</button><button data-stake="100">100</button>
+          </div>
+        </div>
+        <div id="bet-payout" class="muted small"></div>
+        <button id="bet-submit" class="btn wide">Сделать прогноз</button>
+      </div>
+      <button id="bet-cancel" class="btn wide ghost hidden">Отменить прогноз</button>
+      <div id="bet-msg" class="msg hidden"></div>
+      <p class="muted small rules">Коэффициент фиксируется в момент прогноза. Учитывается только основное время. Комиссия с выигрыша: 7% на исход, 10% на точный счёт. Изменить или отменить прогноз можно до начала матча, не чаще раза в 5 минут.</p>
+
+      <!-- Исправление счёта: только администраторам, только для завершённых матчей -->
+      <div id="bet-admin" class="u-admin hidden">
+        <h3>🛠 Исправить счёт</h3>
+        <div class="inline">
+          <input id="fix-home" class="input" type="number" min="0" max="30" step="1" inputmode="numeric" placeholder="Хозяева">
+          <input id="fix-away" class="input" type="number" min="0" max="30" step="1" inputmode="numeric" placeholder="Гости">
+        </div>
+        <input id="fix-reason" class="input" maxlength="200" placeholder="Причина (обязательно)">
+        <button id="fix-apply" class="btn wide">Пересчитать прогнозы</button>
+        <div id="fix-msg" class="msg hidden"></div>
       </div>
     </div>
   </div>

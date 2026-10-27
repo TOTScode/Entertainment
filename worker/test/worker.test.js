@@ -5,6 +5,7 @@ import { createHmac, createHash } from "node:crypto";
 import worker from "../src/index.js";
 import { addTransaction, getBalance, LedgerError, yearsSince } from "../src/users.js";
 import { createDb, roundTrips } from "./fake-d1.js";
+import { UNIT } from "../src/money.js";
 
 const TOKEN = "123:TEST";
 const ADMIN = 1;
@@ -63,10 +64,12 @@ test("регистрация начисляет 10 BIST один раз", async 
 
 test("баланс равен сумме транзакций и не уходит в минус", async () => {
   await call("/api/me", alexey);
-  await addTransaction(env.DB, { userId: 7, amount: 5, type: "quiz_reward" });
-  await addTransaction(env.DB, { userId: 7, amount: -15, type: "bet" });
+  await addTransaction(env.DB, { userId: 7, amount: 5 * UNIT, type: "quiz_reward" });
+  await addTransaction(env.DB, { userId: 7, amount: -15 * UNIT, type: "bet" });
   assert.equal(await getBalance(env.DB, 7), 0);
   await assert.rejects(addTransaction(env.DB, { userId: 7, amount: -1, type: "bet" }), LedgerError);
+  // Триггер в базе не даёт уйти в минус и при прямой записи
+  assert.throws(() => env.DB.raw.prepare("INSERT INTO transactions (user_id, amount, type, created_at) VALUES (7, -1, 'bet', 0)").run(), /insufficient_balance/);
   const sum = env.DB.raw.prepare("SELECT SUM(amount) AS s FROM transactions WHERE user_id = 7").get().s;
   assert.equal(sum, 0);
   assert.equal((await call("/api/me", alexey)).data.balance, 0);
@@ -102,7 +105,7 @@ test("админка: доступ только из ADMIN_IDS, корректи
   const adj = await call("/api/admin/adjust", admin, { method: "POST", body: { user_id: 7, amount: 25, reason: "Победа в конкурсе" } });
   assert.equal(adj.data.user.balance, 35);
   const tx = env.DB.raw.prepare("SELECT * FROM transactions WHERE type = 'admin_adjustment'").get();
-  assert.equal(tx.amount, 25);
+  assert.equal(tx.amount, 25 * UNIT);
   assert.equal(tx.ref, `audit:${adj.data.audit_id}`);
 
   const audit = await call("/api/admin/audit", admin);
@@ -117,7 +120,7 @@ test("миграция переносит существующие баланс�
   db.raw.exec("INSERT INTO users (id, first_name, balance, created_at) VALUES (1, 'A', 10, 0), (2, 'B', 37, 0)");
   db.applyRemaining(1);
   const rows = db.raw.prepare("SELECT user_id, SUM(amount) AS b FROM transactions GROUP BY user_id ORDER BY user_id").all();
-  assert.deepEqual(rows.map((r) => [r.user_id, r.b]), [[1, 10], [2, 37]]);
+  assert.deepEqual(rows.map((r) => [r.user_id, r.b]), [[1, 10 * UNIT], [2, 37 * UNIT]]);
 });
 
 test("стаж считается в полных годах", () => {
@@ -167,7 +170,7 @@ test("API таблицы, истории и статистики", async () => {
 test("расписание делает снимок рейтинга", async () => {
   await call("/api/me", alexey);
   const waits = [];
-  await worker.scheduled({ scheduledTime: Date.UTC(2026, 9, 27, 21, 1) }, env, { waitUntil: (p) => waits.push(p) });
+  await worker.scheduled({ cron: "1 21 * * *", scheduledTime: Date.UTC(2026, 9, 27, 21, 1) }, env, { waitUntil: (p) => waits.push(p) });
   await Promise.all(waits);
   const row = env.DB.raw.prepare("SELECT * FROM rank_snapshots").get();
   assert.deepEqual([row.day, row.user_id, row.rank], ["2026-10-28", 7, 1]);
@@ -209,4 +212,22 @@ test("админка: история операций любого пользо�
   assert.equal((await call("/api/admin/history?user_id=1", alexey)).status, 403);
   const hist = await call("/api/admin/history?user_id=7", admin);
   assert.deepEqual(hist.data.items.map((t) => [t.amount, t.reason]), [[-3, "Флуд"], [10, null]]);
+});
+
+test("дробные BIST: перенос журнала без изменения балансов и корректировка с десятыми", async () => {
+  const db = createDb({ upTo: 3 });
+  db.raw.exec("INSERT INTO users (id, first_name, created_at) VALUES (1, 'A', 0)");
+  db.raw.exec("INSERT INTO transactions (user_id, amount, type, created_at) VALUES (1, 10, 'signup_bonus', 0), (1, 27, 'admin_adjustment', 0)");
+  db.applyRemaining(3);
+  assert.equal(db.raw.prepare("SELECT SUM(amount) AS b FROM transactions").get().b, 37 * UNIT);
+
+  await call("/api/me", alexey);
+  const admin = { id: ADMIN, first_name: "Админ" };
+  await call("/api/me", admin);
+  const ok = await call("/api/admin/adjust", admin, { method: "POST", body: { user_id: 7, amount: 2.5, reason: "Полбалла" } });
+  assert.equal(ok.data.user.balance, 12.5);
+  const bad = await call("/api/admin/adjust", admin, { method: "POST", body: { user_id: 7, amount: 0.25, reason: "x" } });
+  assert.equal(bad.status, 400);
+  assert.equal((await call("/api/me", alexey)).data.balance, 12.5);
+  assert.equal((await call("/api/history", alexey)).data.items[0].amount, 2.5);
 });

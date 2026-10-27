@@ -1,5 +1,6 @@
 // Таблицы участников, ежедневные снимки рейтинга, статистика и история операций.
 
+import { toBist } from "./money.js";
 import { displayName } from "./users.js";
 
 export const PERIODS = ["all", "week", "month"];
@@ -49,7 +50,7 @@ function publicRow(row, previous) {
     id: row.id,
     name: displayName(row),
     photo_url: row.photo_url,
-    score: row.score,
+    score: toBist(row.score),
     // Положительное число — поднялся на столько мест, отрицательное — опустился
     change: previous == null ? null : previous - row.rank,
   };
@@ -100,10 +101,10 @@ export async function publicProfile(db, userId) {
     name: displayName(row),
     username: row.username,
     photo_url: row.photo_url,
-    balance: row.balance,
+    balance: toBist(row.balance),
     registered_at: row.created_at,
     rank: row.rank,
-    stats: { earned: row.earned, spent: row.spent },
+    stats: { earned: toBist(row.earned), spent: toBist(row.spent) },
   };
 }
 
@@ -127,7 +128,7 @@ export async function userStats(db, userId) {
     )
     .bind(userId)
     .first();
-  return { earned: row.earned, spent: row.spent };
+  return { earned: toBist(row.earned), spent: toBist(row.spent) };
 }
 
 // История операций: новые сверху, следующая страница — по id последней показанной операции
@@ -137,12 +138,16 @@ export async function history(db, userId, { before = null, limit = 30 } = {}) {
   const { results } = await db
     .prepare(
       // Для корректировок администратора подтягиваем причину из журнала действий администраторов
-      "SELECT t.id, t.amount, t.type, t.created_at, a.reason FROM transactions t " +
+      "SELECT t.id, t.amount, t.type, t.created_at, a.reason, " +
+      "m.home || ' — ' || m.away AS match, p.market, p.outcome FROM transactions t " +
       "LEFT JOIN audit_log a ON t.ref = 'audit:' || a.id " +
+      // Для операций по прогнозам — матч и исход (ref вида prediction:12 или prediction:12:v1)
+      "LEFT JOIN predictions p ON t.ref LIKE 'prediction:%' AND p.id = CAST(substr(t.ref, 12) AS INTEGER) " +
+      "LEFT JOIN matches m ON m.id = p.match_id " +
       "WHERE t.user_id = ? AND t.id < ? ORDER BY t.id DESC LIMIT ?",
     )
     .bind(userId, cursor, size + 1)
     .all();
-  const items = results.slice(0, size);
+  const items = results.slice(0, size).map((t) => ({ ...t, amount: toBist(t.amount) }));
   return { items, next: results.length > size ? items[items.length - 1].id : null };
 }

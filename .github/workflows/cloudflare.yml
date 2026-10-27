@@ -16,6 +16,9 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+      # Ключи источников матчей и коэффициентов для прогнозов (необязательные)
+      FOOTBALL_DATA_TOKEN: ${{ secrets.FOOTBALL_DATA_TOKEN }}
+      ODDSPAPI_KEY: ${{ secrets.ODDSPAPI_KEY }}
       # Telegram ID администраторов через запятую: Settings → Secrets and variables → Actions → Variables
       ADMIN_IDS: ${{ vars.ADMIN_IDS }}
     steps:
@@ -88,6 +91,19 @@ jobs:
       - name: Set bot token
         if: steps.secrets.outputs.ready == 'true'
         run: printf '%s' "$BOT_TOKEN" | tr -d '[:space:]' | npx -y wrangler@4 secret put BOT_TOKEN
+
+      - name: Set match data keys
+        if: steps.secrets.outputs.ready == 'true'
+        run: |
+          # Без ключей сервис работает, но новые матчи и коэффициенты не появляются
+          for name in FOOTBALL_DATA_TOKEN ODDSPAPI_KEY; do
+            value=$(printenv "$name" | tr -d '[:space:]')
+            if [ -n "$value" ]; then
+              printf '%s' "$value" | npx -y wrangler@4 secret put "$name" >/dev/null && echo "$name: set"
+            else
+              echo "::warning::Секрет $name не задан: прогнозы не будут обновляться"
+            fi
+          done
 
       - name: Connect bot to the worker
         if: steps.secrets.outputs.ready == 'true'

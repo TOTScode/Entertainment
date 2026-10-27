@@ -1,5 +1,8 @@
 // Пользователи, ники и журнал транзакций BIST.
 // Баланс никогда не хранится отдельным числом: это сумма транзакций пользователя.
+// Все суммы здесь — в 1/10000 BIST (см. money.js).
+
+import { UNIT } from "./money.js";
 
 const now = () => Math.floor(Date.now() / 1000);
 
@@ -37,19 +40,22 @@ export async function getBalance(db, userId) {
   return row.balance;
 }
 
-// Добавляет транзакцию, если после неё баланс не уйдёт в минус.
-// Проверка и запись — один SQL-запрос, поэтому параллельные списания не обойдут проверку.
+export const isOverdraft = (e) => String(e?.message).includes("insufficient_balance");
+
+// Добавляет транзакцию (amount — в 1/10000 BIST). Уход в минус запрещает триггер в базе,
+// поэтому параллельные списания не обойдут проверку.
 export async function addTransaction(db, { userId, amount, type, ref = null }) {
-  if (!Number.isInteger(amount) || amount === 0) throw new LedgerError("Сумма должна быть целым числом, не равным нулю");
-  const result = await db
-    .prepare(
-      "INSERT INTO transactions (user_id, amount, type, ref, created_at) " +
-      "SELECT ?1, ?2, ?3, ?4, ?5 " +
-      "WHERE (SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE user_id = ?1) + ?2 >= 0",
-    )
-    .bind(userId, amount, type, ref, now())
-    .run();
-  if (result.meta.changes === 0) throw new LedgerError("Недостаточно BIST");
+  if (!Number.isInteger(amount) || amount === 0) throw new LedgerError("Сумма должна быть ненулевой");
+  let result;
+  try {
+    result = await db
+      .prepare("INSERT INTO transactions (user_id, amount, type, ref, created_at) VALUES (?, ?, ?, ?, ?)")
+      .bind(userId, amount, type, ref, now())
+      .run();
+  } catch (e) {
+    if (isOverdraft(e)) throw new LedgerError("Недостаточно BIST");
+    throw e;
+  }
   return { id: result.meta.last_row_id, balance: await getBalance(db, userId) };
 }
 
@@ -70,7 +76,7 @@ export async function registerOrUpdate(db, tgUser, startBalance) {
     // Уникальный индекс transactions_signup_once гарантирует один бонус на пользователя
     db
       .prepare("INSERT OR IGNORE INTO transactions (user_id, amount, type, created_at) VALUES (?, ?, 'signup_bonus', ?)")
-      .bind(tgUser.id, startBalance, ts),
+      .bind(tgUser.id, Math.round(startBalance * UNIT), ts),
     db
       .prepare(
         "SELECT u.*, COALESCE(SUM(t.amount), 0) AS balance, " +

@@ -3,6 +3,8 @@
 
 import { addTransaction, getUser, LedgerError, searchUsers, displayName } from "./users.js";
 import { history } from "./leaderboard.js";
+import { toBist, toUnits } from "./money.js";
+import { correctionStatements } from "./predictions.js";
 
 const MAX_ADJUSTMENT = 100000;
 
@@ -29,7 +31,7 @@ const publicUser = (u) => ({
   id: u.id,
   name: displayName(u),
   username: u.username,
-  balance: u.balance,
+  balance: toBist(u.balance),
   created_at: u.created_at,
 });
 
@@ -47,15 +49,16 @@ export async function handleAdmin(request, env, admin, path, json) {
     const amount = Number(body.amount);
     const reason = String(body.reason ?? "").trim();
     if (!reason) return json({ error: "Укажите причину" }, 400);
-    if (!Number.isInteger(amount) || amount === 0 || Math.abs(amount) > MAX_ADJUSTMENT) {
-      return json({ error: `Сумма — целое число от 1 до ${MAX_ADJUSTMENT} по модулю` }, 400);
+    // Можно с одним знаком после запятой: 2.5 BIST
+    if (!Number.isFinite(amount) || amount === 0 || Math.abs(amount) > MAX_ADJUSTMENT || !Number.isInteger(Math.round(amount * 1e6) / 1e5)) {
+      return json({ error: `Сумма — от 0.1 до ${MAX_ADJUSTMENT} по модулю, не больше одного знака после запятой` }, 400);
     }
     const target = await getUser(db, userId);
     if (!target) return json({ error: "Пользователь не найден" }, 404);
 
     let tx;
     try {
-      tx = await addTransaction(db, { userId, amount, type: "admin_adjustment" });
+      tx = await addTransaction(db, { userId, amount: toUnits(amount), type: "admin_adjustment" });
     } catch (e) {
       if (e instanceof LedgerError) return json({ error: e.message }, 409);
       throw e;
@@ -65,11 +68,40 @@ export async function handleAdmin(request, env, admin, path, json) {
       action: "balance_adjustment",
       targetUserId: userId,
       reason,
-      before: { balance: target.balance },
-      after: { balance: tx.balance, amount, transaction_id: tx.id },
+      before: { balance: toBist(target.balance) },
+      after: { balance: toBist(tx.balance), amount, transaction_id: tx.id },
     });
     await db.prepare("UPDATE transactions SET ref = ? WHERE id = ?").bind(`audit:${auditId}`, tx.id).run();
     return json({ user: publicUser({ ...target, balance: tx.balance }), audit_id: auditId });
+  }
+
+  // Исправление счёта уже рассчитанного матча: выигрыши пересчитываются, действие пишется в журнал
+  const result = /^\/api\/admin\/matches\/(\d+)\/result$/.exec(path);
+  if (result && request.method === "POST") {
+    const body = await request.json().catch(() => ({}));
+    const home = Number(body.home);
+    const away = Number(body.away);
+    const reason = String(body.reason ?? "").trim();
+    if (!reason) return json({ error: "Укажите причину" }, 400);
+    if (![home, away].every((n) => Number.isInteger(n) && n >= 0 && n <= 30)) return json({ error: "Неверный счёт" }, 400);
+    const match = await db.prepare("SELECT * FROM matches WHERE id = ?").bind(Number(result[1])).first();
+    if (!match) return json({ error: "Матч не найден" }, 404);
+    if (match.status !== "finished") return json({ error: "Исправить можно только счёт сыгранного матча" }, 409);
+    const now = Math.floor(Date.now() / 1000);
+    await db.batch([
+      ...correctionStatements(db, match, [home, away], now),
+      db
+        .prepare(
+          "INSERT INTO audit_log (admin_id, action, target_user_id, reason, before_data, after_data, created_at) VALUES (?, 'match_result', NULL, ?, ?, ?, ?)",
+        )
+        .bind(
+          admin.id, reason,
+          JSON.stringify({ match_id: match.id, match: `${match.home} — ${match.away}`, score: [match.home_score, match.away_score] }),
+          JSON.stringify({ match_id: match.id, match: `${match.home} — ${match.away}`, score: [home, away] }),
+          now,
+        ),
+    ]);
+    return json({ ok: true });
   }
 
   // История операций любого пользователя, для карточки участника в админке
