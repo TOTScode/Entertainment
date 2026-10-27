@@ -10,9 +10,12 @@ binding = "ASSETS"
 
 [vars]
 START_BALANCE = "10"
+# Telegram ID администраторов через запятую. В деплое берётся из переменной репозитория ADMIN_IDS.
+ADMIN_IDS = ""
 
 [[d1_databases]]
 binding = "DB"
 database_name = "tots"
 database_id = "__D1_DATABASE_ID__"
 migrations_dir = "worker/migrations"
+
