@@ -136,3 +136,6 @@ h3 { font-size: 16px; }
 .ustats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 18px; text-align: center; }
 .ustats b { font-size: 17px; }
 #user-dialog .sheet-head { margin-bottom: 4px; }
+#user-dialog .sheet { max-height: 88vh; overflow-y: auto; }
+.u-admin { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--bg); }
+.btn.ghost { background: var(--bg); color: var(--text); }

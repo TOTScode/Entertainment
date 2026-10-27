@@ -207,6 +207,16 @@ async function openUser(row) {
   $("u-tenure").textContent = "\u00a0";
   fillUser({ id: row.id, name: row.name, photo_url: row.photo_url, ...(boardPeriod === "all" ? { rank: row.rank, balance: row.score } : {}) });
   $("user-dialog").classList.remove("hidden");
+  if (me.is_admin) {
+    $("u-admin").classList.remove("hidden");
+    $("u-id").textContent = row.id;
+    $("u-amount").value = "";
+    $("u-reason").value = "";
+    $("u-msg").classList.add("hidden");
+    $("u-history").innerHTML = "";
+    userHistoryNext = undefined;
+    loadUserHistory();
+  }
   try {
     const u = await api(`/api/users/${row.id}`);
     if (openUserId === row.id) fillUser(u);
@@ -215,7 +225,79 @@ async function openUser(row) {
   }
 }
 
+// --- админка в карточке участника ---
+
+let userHistoryNext;
+async function loadUserHistory() {
+  const id = openUserId;
+  const q = userHistoryNext ? `&before=${userHistoryNext}` : "";
+  try {
+    const data = await api(`/api/admin/history?user_id=${id}${q}`);
+    if (id !== openUserId) return;
+    appendHistory($("u-history"), data.items);
+    userHistoryNext = data.next;
+    $("u-more").classList.toggle("hidden", data.next === null);
+  } catch (e) {
+    $("u-more").classList.add("hidden");
+  }
+}
+
+async function userAdjust() {
+  const id = openUserId;
+  const btn = $("u-apply");
+  btn.disabled = true;
+  try {
+    const res = await api("/api/admin/adjust", {
+      method: "POST",
+      body: JSON.stringify({ user_id: id, amount: Number($("u-amount").value), reason: $("u-reason").value }),
+    });
+    $("u-amount").value = "";
+    $("u-reason").value = "";
+    showMsg($("u-msg"), "Баланс изменён и записан в журнал", true);
+    tg?.HapticFeedback?.notificationOccurred("success");
+    // Обновляем карточку, историю, таблицу и журнал действий администраторов
+    fillUser(await api(`/api/users/${id}`));
+    $("u-history").innerHTML = "";
+    userHistoryNext = undefined;
+    loadUserHistory();
+    loadBoard();
+    loadAudit();
+    if (res.user.id === me.id) {
+      me = { ...me, ...(await api("/api/me")) };
+      renderProfile();
+    }
+  } catch (e) {
+    showMsg($("u-msg"), e.message, false);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 // --- история операций ---
+
+function appendHistory(list, items) {
+  for (const t of items) {
+    const li = document.createElement("li");
+    li.className = "hist";
+    const label = document.createElement("span");
+    label.textContent = TX_LABELS[t.type] || t.type;
+    if (t.reason) {
+      const reason = document.createElement("span");
+      reason.className = "reason";
+      reason.textContent = `«${t.reason}»`;
+      label.appendChild(reason);
+    }
+    const when = document.createElement("span");
+    when.className = "when";
+    when.textContent = new Date(t.created_at * 1000).toLocaleString("ru-RU", { dateStyle: "medium", timeStyle: "short" });
+    label.appendChild(when);
+    const amount = document.createElement("b");
+    amount.className = t.amount > 0 ? "plus" : "minus";
+    amount.textContent = signed(t.amount);
+    li.append(label, amount);
+    list.appendChild(li);
+  }
+}
 
 async function loadHistory() {
   if (historyLoading || historyNext === null) return;
@@ -225,27 +307,7 @@ async function loadHistory() {
     const q = historyNext ? `?before=${historyNext}` : "";
     const data = await api(`/api/history${q}`);
     const list = $("history");
-    for (const t of data.items) {
-      const li = document.createElement("li");
-      li.className = "hist";
-      const label = document.createElement("span");
-      label.textContent = TX_LABELS[t.type] || t.type;
-      const when = document.createElement("span");
-      when.className = "when";
-      when.textContent = new Date(t.created_at * 1000).toLocaleString("ru-RU", { dateStyle: "medium", timeStyle: "short" });
-      if (t.reason) {
-        const reason = document.createElement("span");
-        reason.className = "reason";
-        reason.textContent = `«${t.reason}»`;
-        label.appendChild(reason);
-      }
-      label.appendChild(when);
-      const amount = document.createElement("b");
-      amount.className = t.amount > 0 ? "plus" : "minus";
-      amount.textContent = signed(t.amount);
-      li.append(label, amount);
-      list.appendChild(li);
-    }
+    appendHistory(list, data.items);
     historyNext = data.next;
     if (!list.children.length) list.innerHTML = '<li class="muted">Пока нет операций</li>';
     more.classList.toggle("hidden", historyNext === null);
@@ -417,6 +479,8 @@ async function init() {
     $("admin-search").onclick = adminSearch;
     $("admin-q").addEventListener("keydown", (e) => e.key === "Enter" && adminSearch());
     $("admin-apply").onclick = adminApply;
+    $("u-apply").onclick = userAdjust;
+    $("u-more").onclick = loadUserHistory;
     loadAudit();
   }
   document.querySelectorAll(".segmented button").forEach((b) => (b.onclick = () => {

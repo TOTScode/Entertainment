@@ -137,6 +137,19 @@
         <div><div class="muted">Получено</div><b id="u-earned" class="plus">—</b></div>
         <div><div class="muted">Потрачено</div><b id="u-spent" class="minus">—</b></div>
       </div>
+
+      <!-- Админка в карточке: только для администраторов -->
+      <div id="u-admin" class="u-admin hidden">
+        <h3>🛠 Админка</h3>
+        <div class="muted small">Telegram ID: <span id="u-id"></span></div>
+        <input id="u-amount" class="input" type="number" step="1" placeholder="Сумма: +25 или -10">
+        <input id="u-reason" class="input" maxlength="200" placeholder="Причина (обязательно)">
+        <button id="u-apply" class="btn wide">Изменить баланс</button>
+        <div id="u-msg" class="msg hidden"></div>
+        <h3 class="mt">История операций</h3>
+        <ul id="u-history" class="list"></ul>
+        <button id="u-more" class="btn wide ghost hidden">Показать ещё</button>
+      </div>
     </div>
   </div>
 

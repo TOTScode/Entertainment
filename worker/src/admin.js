@@ -2,6 +2,7 @@
 // Каждое ручное действие пишется в audit_log с причиной и состоянием до и после.
 
 import { addTransaction, getUser, LedgerError, searchUsers, displayName } from "./users.js";
+import { history } from "./leaderboard.js";
 
 const MAX_ADJUSTMENT = 100000;
 
@@ -69,6 +70,12 @@ export async function handleAdmin(request, env, admin, path, json) {
     });
     await db.prepare("UPDATE transactions SET ref = ? WHERE id = ?").bind(`audit:${auditId}`, tx.id).run();
     return json({ user: publicUser({ ...target, balance: tx.balance }), audit_id: auditId });
+  }
+
+  // История операций любого пользователя, для карточки участника в админке
+  if (path === "/api/admin/history" && request.method === "GET") {
+    const params = new URL(request.url).searchParams;
+    return json(await history(db, Number(params.get("user_id")), { before: params.get("before") }));
   }
 
   if (path === "/api/admin/audit" && request.method === "GET") {

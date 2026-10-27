@@ -4,7 +4,7 @@ import { createHmac, createHash } from "node:crypto";
 
 import worker from "../src/index.js";
 import { addTransaction, getBalance, LedgerError, yearsSince } from "../src/users.js";
-import { createDb } from "./fake-d1.js";
+import { createDb, roundTrips } from "./fake-d1.js";
 
 const TOKEN = "123:TEST";
 const ADMIN = 1;
@@ -189,4 +189,24 @@ test("история показывает причину корректиров�
   assert.deepEqual(other.data.stats, { earned: 10, spent: 0 });
   assert.equal(other.data.items, undefined);
   assert.equal((await call("/api/users/404", alexey)).status, 404);
+});
+
+test("частые запросы обращаются к базе один раз", async () => {
+  await call("/api/me", alexey);
+  await call("/api/me", { id: 8, first_name: "Иван" });
+  for (const path of ["/api/me", "/api/leaderboard", "/api/leaderboard?period=week", "/api/users/8", "/api/history"]) {
+    roundTrips.count = 0;
+    assert.equal((await call(path, alexey)).status, 200);
+    assert.equal(roundTrips.count, 1, path);
+  }
+});
+
+test("админка: история операций любого пользователя", async () => {
+  await call("/api/me", alexey);
+  const admin = { id: ADMIN, first_name: "Админ" };
+  await call("/api/me", admin);
+  await call("/api/admin/adjust", admin, { method: "POST", body: { user_id: 7, amount: -3, reason: "Флуд" } });
+  assert.equal((await call("/api/admin/history?user_id=1", alexey)).status, 403);
+  const hist = await call("/api/admin/history?user_id=7", admin);
+  assert.deepEqual(hist.data.items.map((t) => [t.amount, t.reason]), [[-3, "Флуд"], [10, null]]);
 });

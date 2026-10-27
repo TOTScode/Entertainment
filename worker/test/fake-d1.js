@@ -5,6 +5,9 @@ import { join } from "node:path";
 
 const MIGRATIONS = new URL("../migrations/", import.meta.url).pathname;
 
+// Счётчик обращений к базе: в D1 каждое обращение — это поездка по сети, batch считается одним
+export const roundTrips = { count: 0 };
+
 class Statement {
   constructor(db, sql, params = []) {
     this.db = db;
@@ -15,13 +18,16 @@ class Statement {
     return new Statement(this.db, this.sql, params);
   }
   async run() {
+    roundTrips.count++;
     const r = this.db.prepare(this.sql).run(...this.params);
     return { meta: { changes: Number(r.changes), last_row_id: Number(r.lastInsertRowid) } };
   }
   async first() {
+    roundTrips.count++;
     return this.db.prepare(this.sql).get(...this.params) ?? null;
   }
   async all() {
+    roundTrips.count++;
     return { results: this.db.prepare(this.sql).all(...this.params) };
   }
 }
@@ -39,6 +45,7 @@ export function createDb({ upTo = Infinity, beforeLast } = {}) {
     prepare: (sql) => new Statement(db, sql),
     // Как в D1: выполняет запросы в одной транзакции и возвращает результаты по порядку
     async batch(statements) {
+      const before = roundTrips.count;
       db.exec("BEGIN");
       try {
         const out = [];
@@ -47,9 +54,11 @@ export function createDb({ upTo = Infinity, beforeLast } = {}) {
           out.push(isRead ? { ...(await st.all()), meta: { changes: 0 } } : { results: [], ...(await st.run()) });
         }
         db.exec("COMMIT");
+        roundTrips.count = before + 1;
         return out;
       } catch (e) {
         db.exec("ROLLBACK");
+        roundTrips.count = before + 1;
         throw e;
       }
     },
