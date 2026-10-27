@@ -30,7 +30,7 @@ Cloudflare D1. Каждый запрос проверяет подпись Teleg
 ## Хостинг на GitHub Pages (без сервера)
 
 Папка `webapp/` автоматически публикуется на GitHub Pages при каждом пуше в `main`
-(`.github/workflows/pages.yml`). Адрес: **https://totscode.github.io/Entartainment/** — его и указывайте
+(`.github/workflows/pages.yml`). Адрес: **https://totscode.github.io/Entertainment/** — его и указывайте
 в BotFather как Web App URL.
 
 В этом режиме сервера нет: имя и фото берутся из Telegram, а баланс хранится в Telegram CloudStorage
