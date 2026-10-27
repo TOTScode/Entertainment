@@ -11,7 +11,7 @@
 - ссылки `?startapp=quiz_<id>` открывают раздел викторин;
 - админка (в профиле, только для `ADMIN_IDS`): поиск пользователя, ручное изменение баланса с обязательной причиной, журнал аудита.
 
-Стек: Cloudflare Workers (JavaScript) + Cloudflare D1. План развития — `plan-v0.2.md` в файлах проекта.
+Стек: Cloudflare Workers (JavaScript) + Cloudflare D1. План развития — `plan-v0.2.md` в файлах проекта, что уже сделано — [`docs/progress.md`](docs/progress.md).
 
 ## Хостинг на Cloudflare Workers
 
