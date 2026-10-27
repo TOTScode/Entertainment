@@ -51,9 +51,27 @@ jobs:
           fi
           sed -i "s/__D1_DATABASE_ID__/$id/" wrangler.toml
 
+      - name: Save database restore point
+        if: steps.secrets.outputs.ready == 'true'
+        run: |
+          # Откат базы к состоянию до этого деплоя:
+          #   npx wrangler d1 time-travel restore tots --timestamp=<время из этого шага>
+          echo "Restore point (UTC): $(date -u +%Y-%m-%dT%H:%M:%SZ)" | tee -a "$GITHUB_STEP_SUMMARY"
+          npx -y wrangler@4 d1 time-travel info tots
+
       - name: Apply migrations
         if: steps.secrets.outputs.ready == 'true'
         run: npx -y wrangler@4 d1 migrations apply tots --remote
+
+      - name: Remove old preview copy
+        if: steps.secrets.outputs.ready == 'true'
+        run: |
+          # Тестовая копия больше не используется. Шаг ничего не делает, если её уже нет.
+          w="npx -y wrangler@4"
+          $w delete --name tots-preview --force || true
+          if $w d1 list --json | jq -e '.[] | select(.name == "tots-preview")' >/dev/null; then
+            $w d1 delete tots-preview -y
+          fi
 
       - name: Build frontend
         if: steps.secrets.outputs.ready == 'true'

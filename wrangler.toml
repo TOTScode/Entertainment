@@ -19,17 +19,3 @@ database_name = "tots"
 database_id = "__D1_DATABASE_ID__"
 migrations_dir = "worker/migrations"
 
-# Тестовая копия для проверки PR до мёржа: отдельный Worker и отдельная база.
-# Деплоится из .github/workflows/preview.yml, адрес https://tots-preview.<поддомен>.workers.dev
-[env.preview]
-name = "tots-preview"
-
-[env.preview.vars]
-START_BALANCE = "10"
-ADMIN_IDS = ""
-
-[[env.preview.d1_databases]]
-binding = "DB"
-database_name = "tots-preview"
-database_id = "__D1_PREVIEW_ID__"
-migrations_dir = "worker/migrations"
