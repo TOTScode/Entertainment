@@ -139,7 +139,7 @@ function boardRow(r) {
   else if (r.change < 0) { chg.textContent = `▼${-r.change}`; chg.classList.add("minus"); }
   const ava = avatarEl(r, "mini");
   // Тап по аватару или имени открывает профиль участника
-  if (r.id !== me.id) { ava.onclick = who.onclick = () => openUser(r.id); }
+  if (r.id !== me.id) { ava.onclick = who.onclick = () => openUser(r); }
   else { ava.onclick = who.onclick = () => openTab("profile"); }
   li.append(rank, ava, who, score, chg);
   return li;
@@ -181,27 +181,37 @@ async function loadBoard() {
 
 // --- профиль другого участника ---
 
-async function openUser(id) {
-  const dlg = $("user-dialog");
-  for (const f of ["u-name", "u-username", "u-tenure", "u-rank", "u-balance", "u-earned", "u-spent"]) $(f).textContent = "";
-  $("u-avatar").style.backgroundImage = "";
-  $("u-avatar").textContent = "";
-  dlg.classList.remove("hidden");
-  try {
-    const u = await api(`/api/users/${id}`);
-    const ava = avatarEl(u);
-    $("u-avatar").style.backgroundImage = ava.style.backgroundImage;
-    $("u-avatar").textContent = ava.textContent;
-    $("u-name").textContent = u.name;
+function fillUser(u) {
+  const ava = avatarEl(u);
+  $("u-avatar").style.backgroundImage = ava.style.backgroundImage;
+  $("u-avatar").textContent = ava.textContent;
+  $("u-name").textContent = u.name;
+  if (u.rank != null) $("u-rank").textContent = u.rank;
+  if (u.balance != null) $("u-balance").textContent = u.balance;
+  if ("username" in u) {
     $("u-username").textContent = u.username ? "@" + u.username : "";
     $("u-username").href = u.username ? `https://t.me/${encodeURIComponent(u.username)}` : "";
-    $("u-tenure").textContent = `Стаж ${tenure(u.registered_at)}`;
-    $("u-rank").textContent = u.rank ?? "—";
-    $("u-balance").textContent = u.balance;
+  }
+  if (u.registered_at) $("u-tenure").textContent = `Стаж ${tenure(u.registered_at)}`;
+  if (u.stats) {
     $("u-earned").textContent = `+${u.stats.earned}`;
     $("u-spent").textContent = `−${u.stats.spent}`;
+  }
+}
+
+// Карточка открывается сразу с тем, что уже известно из таблицы, остальное догружается
+let openUserId = null;
+async function openUser(row) {
+  openUserId = row.id;
+  for (const f of ["u-username", "u-tenure", "u-rank", "u-balance", "u-earned", "u-spent"]) $(f).textContent = "";
+  $("u-tenure").textContent = "\u00a0";
+  fillUser({ id: row.id, name: row.name, photo_url: row.photo_url, ...(boardPeriod === "all" ? { rank: row.rank, balance: row.score } : {}) });
+  $("user-dialog").classList.remove("hidden");
+  try {
+    const u = await api(`/api/users/${row.id}`);
+    if (openUserId === row.id) fillUser(u);
   } catch (e) {
-    $("u-name").textContent = e.message;
+    $("u-tenure").textContent = e.message;
   }
 }
 

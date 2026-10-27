@@ -66,28 +66,45 @@ export async function leaderboard(db, { period = "all", userId, limit = 100, ts 
         "LEFT JOIN rank_snapshots s ON s.user_id = r.id AND s.day = (SELECT MAX(day) FROM rank_snapshots) "
       : `${rankedSql(since)}${rowFields}, NULL AS previous FROM ranked r JOIN users u ON u.id = r.id `;
 
-  const top = await db
-    .prepare(`${select} ORDER BY r.rank LIMIT ${Number(limit)}`)
-    .bind(...params)
-    .all();
-  const mine = await db
-    .prepare(`${select} WHERE r.id = ${since === null ? "?1" : "?2"}`)
-    .bind(...params, userId)
-    .first();
-  const total = await db.prepare("SELECT COUNT(*) AS n FROM users").first();
+  // Три запроса одним обращением к базе
+  const [top, mine, total] = await db.batch([
+    db.prepare(`${select} ORDER BY r.rank LIMIT ${Number(limit)}`).bind(...params),
+    db.prepare(`${select} WHERE r.id = ${since === null ? "?1" : "?2"}`).bind(...params, userId),
+    db.prepare("SELECT COUNT(*) AS n FROM users"),
+  ]);
+  const me = mine.results[0];
   return {
     period,
     since,
-    total: total.n,
+    total: total.results[0].n,
     rows: top.results.map((r) => publicRow(r, r.previous)),
-    me: mine ? publicRow(mine, mine.previous) : null,
+    me: me ? publicRow(me, me.previous) : null,
   };
 }
 
-// Место пользователя в общей таблице
-export async function overallRank(db, userId) {
-  const row = await db.prepare(`${rankedSql(null)}SELECT rank FROM ranked WHERE id = ?`).bind(userId).first();
-  return row ? row.rank : null;
+// Публичный профиль участника одним запросом к базе: данные, баланс, место, получено и потрачено
+export async function publicProfile(db, userId) {
+  const row = await db
+    .prepare(
+      `${rankedSql(null)}SELECT u.id, u.username, u.first_name, u.last_name, u.nickname, u.photo_url, u.created_at, ` +
+      "r.score AS balance, r.rank, " +
+      "(SELECT COALESCE(SUM(CASE WHEN amount > 0 THEN amount END), 0) FROM transactions WHERE user_id = u.id) AS earned, " +
+      "(SELECT COALESCE(-SUM(CASE WHEN amount < 0 THEN amount END), 0) FROM transactions WHERE user_id = u.id) AS spent " +
+      "FROM users u JOIN ranked r ON r.id = u.id WHERE u.id = ?1",
+    )
+    .bind(userId)
+    .first();
+  if (!row) return null;
+  return {
+    id: row.id,
+    name: displayName(row),
+    username: row.username,
+    photo_url: row.photo_url,
+    balance: row.balance,
+    registered_at: row.created_at,
+    rank: row.rank,
+    stats: { earned: row.earned, spent: row.spent },
+  };
 }
 
 // Снимок общего рейтинга на начало дня по Москве. Запускается по расписанию (Cron Trigger).

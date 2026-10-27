@@ -5,7 +5,7 @@
 import { safeEqual, validateInitData, webhookSecret } from "./auth.js";
 import { handleAdmin, isAdmin } from "./admin.js";
 import { handleUpdate } from "./bot.js";
-import { history, leaderboard, overallRank, takeSnapshot, userStats } from "./leaderboard.js";
+import { history, leaderboard, publicProfile, takeSnapshot } from "./leaderboard.js";
 import { displayName, getUser, registerOrUpdate, setNickname, telegramName, validateNickname, yearsSince } from "./users.js";
 
 export { validateInitData, webhookSecret } from "./auth.js";
@@ -33,10 +33,25 @@ async function handleApi(request, env, path) {
   const botToken = (env.BOT_TOKEN || "").trim();
   const tgUser = await validateInitData(request.headers.get("X-Telegram-Init-Data"), botToken);
   if (!tgUser) return json({ error: "Откройте приложение из Telegram" }, 401);
-  const [user, isNew] = await registerOrUpdate(env.DB, tgUser, Number(env.START_BALANCE || 10));
-
+  // Регистрация и обновление данных из Telegram — только при открытии приложения (/api/me).
+  // Остальным запросам достаточно ID из проверенной подписи: так меньше обращений к базе.
   if (path === "/api/me" && request.method === "GET") {
-    return json({ ...profile(user, env, isNew), stats: await userStats(env.DB, user.id) });
+    const [user, isNew] = await registerOrUpdate(env.DB, tgUser, Number(env.START_BALANCE || 10));
+    return json({ ...profile(user, env, isNew), stats: { earned: user.earned, spent: user.spent } });
+  }
+  const user = { id: tgUser.id };
+
+  if (path === "/api/nickname" && request.method === "POST") {
+    const body = await request.json().catch(() => ({}));
+    const { nickname, error } = validateNickname(body.nickname);
+    if (error) return json({ error }, 400);
+    if (!(await setNickname(env.DB, user.id, nickname))) return json({ error: "Этот ник уже занят" }, 409);
+    return json(profile(await getUser(env.DB, user.id), env, false));
+  }
+
+  if (path.startsWith("/api/admin/")) {
+    if (!isAdmin(env, user.id)) return json({ error: "Нет доступа" }, 403);
+    return handleAdmin(request, env, user, path, json);
   }
 
   const params = new URL(request.url).searchParams;
@@ -47,35 +62,13 @@ async function handleApi(request, env, path) {
   // Публичный профиль другого участника: без истории операций
   const other = /^\/api\/users\/(\d+)$/.exec(path);
   if (other && request.method === "GET") {
-    const target = await getUser(env.DB, Number(other[1]));
+    const target = await publicProfile(env.DB, Number(other[1]));
     if (!target) return json({ error: "Пользователь не найден" }, 404);
-    return json({
-      id: target.id,
-      name: displayName(target),
-      username: target.username,
-      photo_url: target.photo_url,
-      balance: target.balance,
-      registered_at: target.created_at,
-      rank: await overallRank(env.DB, target.id),
-      stats: await userStats(env.DB, target.id),
-    });
+    return json(target);
   }
 
   if (path === "/api/history" && request.method === "GET") {
     return json(await history(env.DB, user.id, { before: params.get("before") }));
-  }
-
-  if (path === "/api/nickname" && request.method === "POST") {
-    const body = await request.json().catch(() => ({}));
-    const { nickname, error } = validateNickname(body.nickname);
-    if (error) return json({ error }, 400);
-    if (!(await setNickname(env.DB, user.id, nickname))) return json({ error: "Этот ник уже занят" }, 409);
-    return json(profile({ ...user, nickname }, env, false));
-  }
-
-  if (path.startsWith("/api/admin/")) {
-    if (!isAdmin(env, user.id)) return json({ error: "Нет доступа" }, 403);
-    return handleAdmin(request, env, user, path, json);
   }
 
   return json({ error: "Не найдено" }, 404);

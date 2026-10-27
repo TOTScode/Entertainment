@@ -58,20 +58,29 @@ export async function addTransaction(db, { userId, amount, type, ref = null }) {
 export async function registerOrUpdate(db, tgUser, startBalance) {
   const fields = [tgUser.username ?? null, tgUser.first_name ?? null, tgUser.last_name ?? null, tgUser.photo_url ?? null];
   const ts = now();
-  await db
-    .prepare(
-      "INSERT INTO users (id, username, first_name, last_name, photo_url, created_at) VALUES (?, ?, ?, ?, ?, ?) " +
-      "ON CONFLICT(id) DO UPDATE SET username = excluded.username, first_name = excluded.first_name, " +
-      "last_name = excluded.last_name, photo_url = excluded.photo_url",
-    )
-    .bind(tgUser.id, ...fields, ts)
-    .run();
-  // Уникальный индекс transactions_signup_once гарантирует один бонус на пользователя
-  const bonus = await db
-    .prepare("INSERT OR IGNORE INTO transactions (user_id, amount, type, created_at) VALUES (?, ?, 'signup_bonus', ?)")
-    .bind(tgUser.id, startBalance, ts)
-    .run();
-  return [await getUser(db, tgUser.id), bonus.meta.changes > 0];
+  // Запись профиля, бонус и чтение пользователя со статистикой — одним обращением к базе
+  const [, bonus, read] = await db.batch([
+    db
+      .prepare(
+        "INSERT INTO users (id, username, first_name, last_name, photo_url, created_at) VALUES (?, ?, ?, ?, ?, ?) " +
+        "ON CONFLICT(id) DO UPDATE SET username = excluded.username, first_name = excluded.first_name, " +
+        "last_name = excluded.last_name, photo_url = excluded.photo_url",
+      )
+      .bind(tgUser.id, ...fields, ts),
+    // Уникальный индекс transactions_signup_once гарантирует один бонус на пользователя
+    db
+      .prepare("INSERT OR IGNORE INTO transactions (user_id, amount, type, created_at) VALUES (?, ?, 'signup_bonus', ?)")
+      .bind(tgUser.id, startBalance, ts),
+    db
+      .prepare(
+        "SELECT u.*, COALESCE(SUM(t.amount), 0) AS balance, " +
+        "COALESCE(SUM(CASE WHEN t.amount > 0 THEN t.amount END), 0) AS earned, " +
+        "COALESCE(-SUM(CASE WHEN t.amount < 0 THEN t.amount END), 0) AS spent " +
+        "FROM users u LEFT JOIN transactions t ON t.user_id = u.id WHERE u.id = ? GROUP BY u.id",
+      )
+      .bind(tgUser.id),
+  ]);
+  return [read.results[0], bonus.meta.changes > 0];
 }
 
 export async function getUser(db, userId) {

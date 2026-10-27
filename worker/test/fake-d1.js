@@ -37,6 +37,22 @@ export function createDb({ upTo = Infinity, beforeLast } = {}) {
   return {
     raw: db,
     prepare: (sql) => new Statement(db, sql),
+    // Как в D1: выполняет запросы в одной транзакции и возвращает результаты по порядку
+    async batch(statements) {
+      db.exec("BEGIN");
+      try {
+        const out = [];
+        for (const st of statements) {
+          const isRead = /^\s*(SELECT|WITH)\b/i.test(st.sql);
+          out.push(isRead ? { ...(await st.all()), meta: { changes: 0 } } : { results: [], ...(await st.run()) });
+        }
+        db.exec("COMMIT");
+        return out;
+      } catch (e) {
+        db.exec("ROLLBACK");
+        throw e;
+      }
+    },
     applyRemaining(from) {
       files.slice(from).forEach((f) => db.exec(readFileSync(join(MIGRATIONS, f), "utf8")));
     },
