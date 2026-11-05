@@ -1,6 +1,6 @@
 // Бот: Telegram присылает сообщения вебхуком на /telegram/webhook.
 
-async function telegram(botToken, method, payload) {
+export async function telegram(botToken, method, payload) {
   const res = await fetch(`https://api.telegram.org/bot${botToken}/${method}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

@@ -442,6 +442,72 @@ async function adminApply() {
   }
 }
 
+// --- дашборд администратора ---
+
+let dashData = null;
+let dashPeriod = "day";
+
+async function loadDashboard() {
+  try {
+    dashData = await api("/api/admin/dashboard");
+    renderDashboard();
+  } catch (e) {
+    $("dash-body").innerHTML = `<div class="muted">${e.message}</div>`;
+  }
+}
+
+function renderDashboard() {
+  const d = dashData;
+  const p = dashPeriod;
+  const body = $("dash-body");
+  body.innerHTML = "";
+  const section = (title) => {
+    const h = document.createElement("h4");
+    h.textContent = title;
+    body.appendChild(h);
+  };
+  const row = (label, value, sub = false) => {
+    const r = document.createElement("div");
+    r.className = sub ? "row sub" : "row";
+    r.append(Object.assign(document.createElement("span"), { textContent: label }), Object.assign(document.createElement("b"), { textContent: value }));
+    body.appendChild(r);
+  };
+  const pct = (a, b) => (b ? ` (${Math.round((a / b) * 100)}%)` : "");
+
+  section("BIST");
+  row("Выдано", `+${fmt(d.bist.issued[p])}`);
+  row("Списано", `−${fmt(d.bist.spent[p])}`);
+  for (const t of d.bist.by_type) {
+    if (!t.count[p]) continue;
+    row(`${TX_LABELS[t.type] || t.type} · ${t.count[p]}`, signed(t[p]), true);
+  }
+  row("Всего на балансах", fmt(d.bist.total));
+
+  section("Игроки");
+  row("Всего", d.players.total);
+  row("Новых", d.players.new[p]);
+  row("Активных", d.players.active[p]);
+  row(`Набрали ${d.players.qualify_bist} BIST`, d.players.qualified);
+  row(`Доля BIST у топ-10% (${d.players.top_n})`, d.players.top_share == null ? "—" : `${d.players.top_share}%`);
+
+  const pr = d.predictions;
+  section("Прогнозы");
+  row("Сделано", `${pr.made[p]} от ${pr.players[p]} игр.`);
+  row("Поставлено", `${fmt(pr.stake[p])} BIST`);
+  row("Угадано", `${pr.won[p]}${pct(pr.won[p], pr.won[p] + pr.lost[p])}`);
+  row("Не угадано", pr.lost[p]);
+  row("Выплачено", `${fmt(pr.payout[p])} BIST`);
+  row("Ждут результата", `${pr.active.count} · ${fmt(pr.active.stake)} BIST`);
+
+  const q = d.quizzes;
+  section("Викторины");
+  row("Игроков", q.players[p]);
+  row("Открыто вопросов", q.opened[p]);
+  row("Правильных ответов", `${q.correct[p]}${pct(q.correct[p], q.correct[p] + q.wrong[p])}`);
+  row("Неправильных", q.wrong[p]);
+  row("Очередь до", q.queue_until ? new Date(q.queue_until * 1000).toLocaleString("ru-RU", { timeZone: "Europe/Moscow", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" }) : "пусто");
+}
+
 async function loadAudit() {
   const list = $("admin-audit");
   try {
@@ -1448,6 +1514,13 @@ async function init() {
   $("user-dialog").addEventListener("click", (e) => e.target === e.currentTarget && e.target.classList.add("hidden"));
   if (me.is_admin) {
     $("admin").classList.remove("hidden");
+    $("dash").classList.remove("hidden");
+    document.querySelectorAll("#dash-period button").forEach((b) => (b.onclick = () => {
+      dashPeriod = b.dataset.period;
+      document.querySelectorAll("#dash-period button").forEach((x) => x.classList.toggle("active", x === b));
+      if (dashData) renderDashboard();
+    }));
+    loadDashboard();
     $("admin-search").onclick = adminSearch;
     $("admin-q").addEventListener("keydown", (e) => e.key === "Enter" && adminSearch());
     $("admin-apply").onclick = adminApply;

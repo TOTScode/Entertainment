@@ -5,6 +5,7 @@ import { addTransaction, getUser, LedgerError, searchUsers, displayName } from "
 import { history } from "./leaderboard.js";
 import { toBist, toUnits } from "./money.js";
 import { correctionStatements } from "./predictions.js";
+import { dashboard } from "./dashboard.js";
 import { adminQuizzes, createQuiz, deleteQuiz, moveQuiz, QuizError, saveSettings, updateQuiz, uploadMedia } from "./quizzes.js";
 
 const MAX_ADJUSTMENT = 100000;
@@ -104,6 +105,8 @@ export async function handleAdmin(request, env, admin, path, json) {
     ]);
     return json({ ok: true });
   }
+
+  if (path === "/api/admin/dashboard" && request.method === "GET") return json(await dashboard(db, Math.floor(Date.now() / 1000)));
 
   // --- викторины ---
   if (path.startsWith("/api/admin/quiz") || path === "/api/admin/media") {

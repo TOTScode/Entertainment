@@ -5,6 +5,7 @@
 import { cancelMatch, settleMatch } from "./predictions.js";
 import { findFdMatch, footballData, oddsPapi, TOURNAMENTS } from "./providers.js";
 
+export const SYNC_STATUS = "sync_status";
 export const RESULTS_RESERVE = 40; // запросов OddsPapi, которые не тратим на коэффициенты
 const ODDS_EVERY = 20 * 3600; // коэффициенты турнира — не чаще раза в 20 часов
 const ODDS_HORIZON = 3 * 86400; // ...и только если матч турнира в ближайшие 3 дня
@@ -166,13 +167,27 @@ async function syncOdds(env, op, budget, now, log) {
 
 export async function sync(env, now = Math.floor(Date.now() / 1000)) {
   const log = [];
+  const errors = [];
+  const fail = (prefix) => (e) => {
+    const msg = `${prefix}${e.message}`;
+    log.push(msg);
+    errors.push(msg);
+    return null;
+  };
   const op = env.ODDSPAPI_KEY ? oddsPapi(env.ODDSPAPI_KEY) : null;
-  const quota = op ? await op.quota().catch((e) => (log.push(String(e.message)), null)) : null;
+  const quota = op ? await op.quota().catch(fail("лимит OddsPapi: ")) : null;
   const budget = new Budget(quota);
   // Каждая часть независима: сбой одного источника не мешает другому
-  await syncResults(env, op, budget, now, log).catch((e) => log.push(`результаты: ${e.message}`));
-  if (op && quota) await syncOdds(env, op, budget, now, log).catch((e) => log.push(`коэффициенты: ${e.message}`));
+  await syncResults(env, op, budget, now, log).catch(fail("результаты: "));
+  if (op && quota) await syncOdds(env, op, budget, now, log).catch(fail("коэффициенты: "));
   if (quota) log.push(`OddsPapi: осталось ${budget.left} из ${quota.limit}`);
   console.log(`sync: ${log.join("; ") || "без изменений"}`);
+  // Итог запуска для оповещений администраторам: сбои подряд и остаток лимита
+  const prev = (await getState(env.DB, SYNC_STATUS)) || {};
+  await setState(env.DB, SYNC_STATUS, {
+    failures: errors.length ? (prev.failures || 0) + 1 : 0,
+    last_error: errors[0] || null,
+    quota: quota ? { left: budget.left, limit: quota.limit } : prev.quota || null,
+  }, now).run().catch(() => {});
   return log;
 }

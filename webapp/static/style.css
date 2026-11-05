@@ -234,3 +234,10 @@ h3 { font-size: 16px; }
 .brow .acc { width: 48px; text-align: center; flex-shrink: 0; font-weight: 600; }
 .brow .chg { width: 26px; }
 .board-legend { margin: 8px 0 4px; font-size: 12px; }
+
+/* Дашборд администратора */
+.dash h4 { margin: 16px 0 6px; font-size: 13px; color: var(--hint); font-weight: 600; text-transform: uppercase; letter-spacing: .03em; }
+.dash .row { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; font-size: 14px; border-bottom: 1px solid var(--bg); }
+.dash .row:last-child { border-bottom: 0; }
+.dash .row b { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dash .sub { padding-left: 12px; color: var(--hint); }

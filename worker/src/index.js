@@ -10,6 +10,7 @@ import {
   cancelPrediction, getMatch, listMatches, myPredictions, placePrediction, PredictionError,
 } from "./predictions.js";
 import { sync } from "./sync.js";
+import { checkAlerts } from "./alerts.js";
 import { answerQuestion, openQuestion, pastQuiz, QuizError, quizState, serveMedia } from "./quizzes.js";
 import { history, leaderboard, publicProfile, takeSnapshot } from "./leaderboard.js";
 import { displayName, getUser, registerOrUpdate, setNickname, telegramName, validateNickname, yearsSince } from "./users.js";
@@ -145,10 +146,11 @@ export default {
     return env.ASSETS.fetch(request);
   },
 
-  // Cron Triggers из wrangler.toml: снимок рейтинга в начале дня по Москве и синхронизация матчей раз в 30 минут
+  // Cron Triggers из wrangler.toml: снимок рейтинга в начале дня по Москве, синхронизация матчей и оповещения раз в 30 минут
   async scheduled(event, env, ctx) {
     const now = Math.floor(event.scheduledTime / 1000);
     if (event.cron === SNAPSHOT_CRON) ctx.waitUntil(takeSnapshot(env.DB, now));
-    else ctx.waitUntil(sync(env, now));
+    // После синхронизации — оповещения администраторам (по каждой причине не чаще раза в сутки)
+    else ctx.waitUntil(sync(env, now).then(() => checkAlerts(env, now)).catch((e) => console.error(e)));
   },
 };

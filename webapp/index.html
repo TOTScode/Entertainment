@@ -116,6 +116,17 @@
         </div>
       </div>
 
+      <!-- Дашборд: только администраторам -->
+      <div id="dash" class="card hidden">
+        <h3>📊 Дашборд</h3>
+        <div id="dash-period" class="segmented">
+          <button data-period="day" class="active">Сегодня</button>
+          <button data-period="week">Неделя</button>
+          <button data-period="month">Месяц</button>
+        </div>
+        <div id="dash-body" class="dash"><div class="muted">Загрузка…</div></div>
+      </div>
+
       <!-- Админка: показывается только администраторам -->
       <div id="admin" class="card hidden">
         <h3>🛠 Админка</h3>
