@@ -448,7 +448,6 @@ async function loadAudit() {
 
 // --- прогнозы ---
 
-const COMMISSION = { "1x2": 7, score: 10 };
 const STAKE_MIN = 1;
 const STAKE_MAX = 100;
 let predTournament = "";
@@ -464,11 +463,9 @@ function outcomeLabel(market, outcome) {
   return { 1: "П1", X: "Ничья", 2: "П2" }[outcome] || outcome;
 }
 
-// Та же формула, что на сервере: ставка + ставка × (коэффициент − 1) × (1 − комиссия)
-function payoutOf(stake, price, market) {
-  const units = stake * 10000;
-  const cents = Math.round(price * 100);
-  return (units + Math.floor((units * (cents - 100) * (100 - COMMISSION[market])) / 10000)) / 10000;
+// Та же формула, что на сервере: ставка × коэффициент
+function payoutOf(stake, price) {
+  return Math.floor((stake * 10000 * Math.round(price * 100)) / 100) / 10000;
 }
 
 function kickoff(ts) {
@@ -798,7 +795,7 @@ function updatePayout() {
     el.textContent = `${outcomeLabel(bet.market, bet.outcome)} × ${price.toFixed(2)} · ставка от ${STAKE_MIN} до ${STAKE_MAX} BIST, целым числом`;
     return;
   }
-  const payout = payoutOf(stake, price, bet.market);
+  const payout = payoutOf(stake, price);
   el.textContent = `${outcomeLabel(bet.market, bet.outcome)} × ${price.toFixed(2)} · при выигрыше получите ${fmt(payout)} BIST (+${fmt(payout - stake)})`;
 }
 

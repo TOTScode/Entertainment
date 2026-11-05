@@ -5,7 +5,7 @@
 import { toBist, UNIT } from "./money.js";
 import { TOURNAMENTS } from "./providers.js";
 
-export const MARKETS = { "1x2": { commission: 7 }, score: { commission: 10 } };
+export const MARKETS = ["1x2", "score"];
 export const MIN_STAKE = 1;
 export const MAX_STAKE = 100;
 export const COOLDOWN = 5 * 60; // секунд между действиями с одним прогнозом
@@ -21,14 +21,13 @@ export class PredictionError extends Error {
   }
 }
 
-// Выплата по формуле спецификации: ставка + ставка × (коэффициент − 1) × (1 − комиссия).
+// Выплата = ставка × коэффициент, без комиссии.
 // Считается в целых числах: ставка кратна 1 BIST, коэффициент — с двумя знаками, поэтому результат точный.
-export function payoutUnits(stake, price, commission) {
-  const cents = Math.round(price * 100);
-  return stake + Math.floor((stake * (cents - 100) * (100 - commission)) / 10000);
+export function payoutUnits(stake, price) {
+  return Math.floor((stake * Math.round(price * 100)) / 100);
 }
 
-const PAYOUT_SQL = "stake + (stake * (CAST(ROUND(price * 100) AS INTEGER) - 100) * (100 - commission)) / 10000";
+const PAYOUT_SQL = "stake * CAST(ROUND(price * 100) AS INTEGER) / 100";
 
 export const isOpen = (m, now) =>
   m.status === "scheduled" && m.start_time > now && m.odds_updated_at != null && m.odds_updated_at >= now - ODDS_FRESH;
@@ -44,9 +43,8 @@ function publicPrediction(p, now) {
     outcome: p.outcome,
     stake: toBist(p.stake),
     price: p.price,
-    commission: p.commission,
     status: p.status,
-    payout: p.status === "active" ? toBist(payoutUnits(p.stake, p.price, p.commission)) : toBist(p.payout),
+    payout: p.status === "active" ? toBist(payoutUnits(p.stake, p.price)) : toBist(p.payout),
     created_at: p.created_at,
     settled_at: p.settled_at,
     // Когда можно будет снова изменить или отменить прогноз
@@ -155,7 +153,7 @@ function mapDbError(e) {
 // Новый прогноз или замена действующего на этом рынке. Ставка — целое число BIST.
 export async function placePrediction(db, userId, { match_id, market, outcome, stake }, now) {
   const matchId = Number(match_id);
-  if (!MARKETS[market]) throw new PredictionError("Неизвестный тип прогноза", 400);
+  if (!MARKETS.includes(market)) throw new PredictionError("Неизвестный тип прогноза", 400);
   const amount = Number(stake);
   if (!Number.isInteger(amount) || amount < MIN_STAKE || amount > MAX_STAKE) {
     throw new PredictionError(`Ставка — целое число от ${MIN_STAKE} до ${MAX_STAKE} BIST`, 400);
@@ -187,10 +185,10 @@ export async function placePrediction(db, userId, { match_id, market, outcome, s
   statements.push(
     db
       .prepare(
-        "INSERT INTO predictions (user_id, match_id, market, outcome, stake, price, commission, status, created_at, updated_at) " +
-        "VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)",
+        "INSERT INTO predictions (user_id, match_id, market, outcome, stake, price, status, created_at, updated_at) " +
+        "VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?)",
       )
-      .bind(userId, matchId, market, String(outcome), units, price, MARKETS[market].commission, now, now),
+      .bind(userId, matchId, market, String(outcome), units, price, now, now),
     db
       .prepare(
         "INSERT INTO transactions (user_id, amount, type, ref, created_at) VALUES (?1, ?2, 'bet', " +

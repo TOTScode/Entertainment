@@ -36,10 +36,10 @@ beforeEach(() => {
   addUser(2);
 });
 
-test("выплата по формуле: 10 BIST × 2.00 с комиссией 7% = 19.3", () => {
-  assert.equal(payoutUnits(10 * UNIT, 2, 7), 19.3 * UNIT);
-  assert.equal(payoutUnits(10 * UNIT, 9, 10), 82 * UNIT); // 10 + 10 × 8 × 0.9
-  assert.equal(payoutUnits(3 * UNIT, 1.87, 7), 5.4273 * UNIT); // 3 + 3 × 0.87 × 0.93
+test("выплата без комиссии: ставка × коэффициент", () => {
+  assert.equal(payoutUnits(10 * UNIT, 2), 20 * UNIT);
+  assert.equal(payoutUnits(10 * UNIT, 9), 90 * UNIT);
+  assert.equal(payoutUnits(3 * UNIT, 1.87), 5.61 * UNIT);
 });
 
 test("ставка: лимиты, баланс, коэффициент фиксируется", async () => {
@@ -57,7 +57,7 @@ test("ставка: лимиты, баланс, коэффициент фикс�
   const res = await bet(10);
   assert.equal(res.balance, 90);
   assert.equal(res.prediction.price, 2);
-  assert.equal(res.prediction.payout, 19.3);
+  assert.equal(res.prediction.payout, 20);
   // Исход и точный счёт одновременно
   await placePrediction(db, 1, { match_id: id, market: "score", outcome: "2:1", stake: 5 }, NOW);
   assert.equal(balance(1), 85);
@@ -73,7 +73,7 @@ test("приём закрыт после начала матча и без св�
   await assert.rejects(placePrediction(db, 1, { match_id: stale, market: "1x2", outcome: "1", stake: 1 }, NOW), /закрыт/);
   // Даже в обход проверок база не примет прогноз на начавшийся матч
   assert.throws(
-    () => db.raw.prepare("INSERT INTO predictions (user_id, match_id, market, outcome, stake, price, commission, created_at, updated_at) VALUES (1, ?, '1x2', '1', 1, 2, 7, ?, ?)").run(started, NOW, NOW),
+    () => db.raw.prepare("INSERT INTO predictions (user_id, match_id, market, outcome, stake, price, created_at, updated_at) VALUES (1, ?, '1x2', '1', 1, 2, ?, ?)").run(started, NOW, NOW),
     /match_closed/,
   );
 });
@@ -107,10 +107,10 @@ test("расчёт: выигрыш по формуле, повторный ра�
   await placePrediction(db, 1, { match_id: id, market: "score", outcome: "2:1", stake: 10 }, NOW);
   await placePrediction(db, 2, { match_id: id, market: "1x2", outcome: "2", stake: 10 }, NOW);
   assert.equal(await settleMatch(db, match(id), [2, 1], NOW + 9000), true);
-  assert.equal(balance(1), 80 + 19.3 + 82);
+  assert.equal(balance(1), 80 + 20 + 90);
   assert.equal(balance(2), 90);
   assert.equal(await settleMatch(db, match(id), [2, 1], NOW + 9100), false);
-  assert.equal(balance(1), 181.3);
+  assert.equal(balance(1), 190);
   const statuses = db.raw.prepare("SELECT user_id, market, status FROM predictions ORDER BY id").all().map((r) => `${r.user_id}${r.market}${r.status}`);
   assert.deepEqual(statuses, ["11x2won", "1scorewon", "21x2lost"]);
   assert.equal(match(id).status, "finished");
@@ -127,11 +127,11 @@ test("отмена матча возвращает ставки, исправл�
   await placePrediction(db, 1, { match_id: b, market: "1x2", outcome: "1", stake: 10 }, NOW);
   await placePrediction(db, 2, { match_id: b, market: "1x2", outcome: "X", stake: 10 }, NOW);
   await settleMatch(db, match(b), [1, 0], NOW + 9000);
-  assert.equal(balance(1), 109.3);
+  assert.equal(balance(1), 110);
   // Админ исправил счёт на 1:1 — выигрыш первого списан, второй получил свой
   await db.batch(correctionStatements(db, match(b), [1, 1], NOW + 9500));
   assert.equal(balance(1), 90);
-  assert.equal(balance(2), 90 + 10 + 10 * 2.5 * 0.93);
+  assert.equal(balance(2), 90 + 10 * 3.5);
   assert.equal(match(b).settle_version, 2);
 });
 
@@ -163,8 +163,8 @@ test("коэффициенты из ответа OddsPapi и перенос ма
 test("синхронизация: результат АПЛ из football-data.org, ЛЕ из OddsPapi, резерв лимита", async () => {
   const pl = await addMatch({ op: "pl1", start: NOW - 3 * 3600, oddsAt: NOW - 4 * 3600 });
   const el = await addMatch({ op: "el1", tournament: "EL", start: NOW - 3 * 3600, oddsAt: NOW - 4 * 3600 });
-  db.raw.prepare("INSERT INTO predictions (user_id, match_id, market, outcome, stake, price, commission, created_at, updated_at) VALUES (1, ?, '1x2', '1', ?, 2, 7, ?, ?)").run(pl, 10 * UNIT, NOW - 4 * 3600, NOW - 4 * 3600);
-  db.raw.prepare("INSERT INTO predictions (user_id, match_id, market, outcome, stake, price, commission, created_at, updated_at) VALUES (2, ?, 'score', '1:1', ?, 6.5, 10, ?, ?)").run(el, 10 * UNIT, NOW - 4 * 3600, NOW - 4 * 3600);
+  db.raw.prepare("INSERT INTO predictions (user_id, match_id, market, outcome, stake, price, created_at, updated_at) VALUES (1, ?, '1x2', '1', ?, 2, ?, ?)").run(pl, 10 * UNIT, NOW - 4 * 3600, NOW - 4 * 3600);
+  db.raw.prepare("INSERT INTO predictions (user_id, match_id, market, outcome, stake, price, created_at, updated_at) VALUES (2, ?, 'score', '1:1', ?, 6.5, ?, ?)").run(el, 10 * UNIT, NOW - 4 * 3600, NOW - 4 * 3600);
 
   const calls = [];
   globalThis.fetch = async (url) => {
@@ -185,8 +185,8 @@ test("синхронизация: результат АПЛ из football-data.o
   assert.equal(match(pl).status, "finished");
   assert.deepEqual([match(pl).home_score, match(pl).away_score], [2, 2]);
   assert.equal(match(pl).fd_id, 99);
-  // ЛЕ 1:1 в основное время — точный счёт сыграл: 10 + 10 × 5.5 × 0.9
-  assert.equal(balance(2), 100 + 59.5); // ставка в тесте записана без списания
+  // ЛЕ 1:1 в основное время — точный счёт сыграл: 10 × 6.5
+  assert.equal(balance(2), 100 + 65); // ставка в тесте записана без списания
   // Было 42 запроса, 2 ушли на результаты ЛЕ; оставшиеся 40 — резерв, на коэффициенты их тратить нельзя
   assert.ok(!calls.includes("/v4/odds-by-tournaments"), calls.join(","));
   assert.ok(log.some((l) => l.includes("лимит OddsPapi")));
