@@ -138,9 +138,14 @@ function boardRow(r) {
   const who = document.createElement("span");
   who.className = "who";
   who.textContent = r.name;
+  // Две колонки: правильные ответы в викторинах и доля угаданных исходов матчей (от 6 прогнозов)
   const score = document.createElement("span");
   score.className = "score";
-  score.textContent = boardPeriod === "all" ? fmt(r.score) : signed(r.score);
+  score.textContent = r.quiz;
+  const acc = document.createElement("span");
+  acc.className = "acc";
+  acc.textContent = r.accuracy == null ? "—" : `${r.accuracy}%`;
+  acc.title = r.bets ? `Угадано ${r.won} из ${r.bets}` : "Нет рассчитанных прогнозов на исход";
   const chg = document.createElement("span");
   chg.className = "chg";
   if (r.change > 0) { chg.textContent = `▲${r.change}`; chg.classList.add("plus"); }
@@ -149,7 +154,7 @@ function boardRow(r) {
   // Тап по аватару или имени открывает профиль участника
   if (r.id !== me.id) { ava.onclick = who.onclick = () => openUser(r); }
   else { ava.onclick = who.onclick = () => openTab("profile"); }
-  li.append(rank, ava, who, score, chg);
+  li.append(rank, ava, who, score, acc, chg);
   return li;
 }
 
@@ -163,7 +168,7 @@ async function loadBoard() {
     list.innerHTML = "";
     $("board-note").textContent =
       data.since == null ? `Участников: ${data.total}` :
-      `${period === "week" ? "Заработано за неделю" : "Заработано за месяц"} с ${new Date(data.since * 1000).toLocaleDateString("ru-RU", { day: "numeric", month: "long", timeZone: "Europe/Moscow" })}`;
+      `${period === "week" ? "За неделю" : "За месяц"} с ${new Date(data.since * 1000).toLocaleDateString("ru-RU", { day: "numeric", month: "long", timeZone: "Europe/Moscow" })}`;
     let myRow = null;
     for (const r of data.rows) {
       const li = boardRow(r);
@@ -196,6 +201,8 @@ function fillUser(u) {
   $("u-name").textContent = u.name;
   if (u.rank != null) $("u-rank").textContent = u.rank;
   if (u.balance != null) $("u-balance").textContent = fmt(u.balance);
+  if (u.quiz != null) $("u-quiz").textContent = u.quiz;
+  if ("accuracy" in u) $("u-acc").textContent = u.accuracy == null ? "—" : `${u.accuracy}%`;
   if ("username" in u) {
     $("u-username").textContent = u.username ? "@" + u.username : "";
     $("u-username").href = u.username ? `https://t.me/${encodeURIComponent(u.username)}` : "";
@@ -211,9 +218,9 @@ function fillUser(u) {
 let openUserId = null;
 async function openUser(row) {
   openUserId = row.id;
-  for (const f of ["u-username", "u-tenure", "u-rank", "u-balance", "u-earned", "u-spent"]) $(f).textContent = "";
+  for (const f of ["u-username", "u-tenure", "u-rank", "u-balance", "u-earned", "u-spent", "u-quiz", "u-acc"]) $(f).textContent = "";
   $("u-tenure").textContent = "\u00a0";
-  fillUser({ id: row.id, name: row.name, photo_url: row.photo_url, ...(boardPeriod === "all" ? { rank: row.rank, balance: row.score } : {}) });
+  fillUser({ id: row.id, name: row.name, photo_url: row.photo_url, ...(boardPeriod === "all" ? { rank: row.rank, quiz: row.quiz, accuracy: row.accuracy } : {}) });
   $("user-dialog").classList.remove("hidden");
   if (me.is_admin) {
     $("u-admin").classList.remove("hidden");

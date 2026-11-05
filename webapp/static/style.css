@@ -133,7 +133,7 @@ h3 { font-size: 16px; }
 .hist .reason { display: block; font-size: 13px; color: var(--text); opacity: .8; }
 .gold { color: var(--gold); }
 .link { text-decoration: none; display: block; }
-.ustats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 18px; text-align: center; }
+.ustats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 18px; text-align: center; }
 .ustats b { font-size: 17px; }
 #user-dialog .sheet-head { margin-bottom: 4px; }
 #user-dialog .sheet { max-height: 88vh; overflow-y: auto; }
@@ -219,3 +219,13 @@ h3 { font-size: 16px; }
 .qa-file { font-size: 13px; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .qa-file input[type=file] { max-width: 100%; color: var(--hint); }
 .badge { display: inline-block; font-size: 11px; padding: 2px 6px; border-radius: 6px; background: var(--accent); color: var(--accent-text); margin-left: 4px; vertical-align: middle; }
+/* Таблица: колонки «Викторины» и «Исходы» */
+.board-head { display: flex; gap: 8px; padding: 6px 0; font-size: 12px; color: var(--hint); border-bottom: 1px solid var(--bg); }
+.board-head span:first-child { flex: 1; padding-left: 4px; }
+.board-head span:nth-child(2) { width: 52px; text-align: center; }
+.board-head span:nth-child(3) { width: 48px; text-align: center; margin-right: 34px; }
+.brow { gap: 8px; }
+.brow .score { width: 52px; text-align: center; flex-shrink: 0; }
+.brow .acc { width: 48px; text-align: center; flex-shrink: 0; font-weight: 600; }
+.brow .chg { width: 26px; }
+.board-legend { margin: 8px 0 4px; font-size: 12px; }

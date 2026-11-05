@@ -188,7 +188,8 @@ test("история показывает причину корректиров�
   const other = await call("/api/users/1", alexey);
   assert.equal(other.data.name, "Админ");
   assert.equal(other.data.username, "boss");
-  assert.equal(other.data.rank, 2);
+  assert.ok([1, 2].includes(other.data.rank)); // у обоих пока 0 ответов и прогнозов
+  assert.equal(other.data.balance, 10);
   assert.deepEqual(other.data.stats, { earned: 10, spent: 0 });
   assert.equal(other.data.items, undefined);
   assert.equal((await call("/api/users/404", alexey)).status, 404);

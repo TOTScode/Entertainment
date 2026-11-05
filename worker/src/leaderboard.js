@@ -27,22 +27,34 @@ export function periodStart(period, ts) {
   return start / 1000 - MSK;
 }
 
-// Все пользователи с местом. Общая таблица — по балансу; неделя и месяц — по сумме операций за период
-// без бонуса за регистрацию. При равенстве выше тот, кто зарегистрировался раньше.
+// Все пользователи с местом. Сортировка по успешности, а не по BIST (решение от 5.11):
+// 1) правильные ответы в викторинах, 2) доля угаданных исходов матчей (без точного счёта) — только при 6 и более
+// рассчитанных прогнозах на исход, 3) число угаданных исходов. При равенстве выше тот, кто зарегистрировался раньше.
+// Неделя и месяц считают только ответы и рассчитанные прогнозы за период.
+export const MIN_BETS = 6; // долю угаданных показываем, когда рассчитанных прогнозов на исход больше 5
+
 function rankedSql(since) {
-  const filter = since === null ? "" : "AND t.created_at >= ?1 AND t.type != 'signup_bonus'";
+  const quizFilter = since === null ? "" : "AND a.answered_at >= ?1";
+  const predFilter = since === null ? "" : "AND p.settled_at >= ?1";
   return (
-    "WITH scores AS (" +
-    "  SELECT u.id, u.created_at, COALESCE(SUM(t.amount), 0) AS score FROM users u " +
-    `  LEFT JOIN transactions t ON t.user_id = u.id ${filter} GROUP BY u.id` +
+    "WITH quiz AS (" +
+    `  SELECT a.user_id, COUNT(*) AS n FROM quiz_answers a WHERE a.correct = 1 ${quizFilter} GROUP BY a.user_id` +
+    "), pred AS (" +
+    "  SELECT p.user_id, SUM(p.status = 'won') AS won, COUNT(*) AS bets FROM predictions p " +
+    `  WHERE p.market = '1x2' AND p.status IN ('won', 'lost') ${predFilter} GROUP BY p.user_id` +
+    "), scores AS (" +
+    "  SELECT u.id, u.created_at, COALESCE(q.n, 0) AS quiz, COALESCE(p.won, 0) AS won, COALESCE(p.bets, 0) AS bets, " +
+    `  CASE WHEN p.bets >= ${MIN_BETS} THEN CAST(p.won AS REAL) / p.bets END AS accuracy ` +
+    "  FROM users u LEFT JOIN quiz q ON q.user_id = u.id LEFT JOIN pred p ON p.user_id = u.id" +
     "), ranked AS (" +
-    "  SELECT id, score, ROW_NUMBER() OVER (ORDER BY score DESC, created_at ASC, id ASC) AS rank FROM scores" +
+    "  SELECT id, quiz, won, bets, accuracy, ROW_NUMBER() OVER (" +
+    "    ORDER BY quiz DESC, COALESCE(accuracy, -1) DESC, won DESC, created_at ASC, id ASC) AS rank FROM scores" +
     ") "
   );
 }
 
 const rowFields =
-  "SELECT r.rank, r.score, u.id, u.username, u.first_name, u.last_name, u.nickname, u.photo_url";
+  "SELECT r.rank, r.quiz, r.won, r.bets, r.accuracy, u.id, u.username, u.first_name, u.last_name, u.nickname, u.photo_url";
 
 function publicRow(row, previous) {
   return {
@@ -50,7 +62,11 @@ function publicRow(row, previous) {
     id: row.id,
     name: displayName(row),
     photo_url: row.photo_url,
-    score: toBist(row.score),
+    quiz: row.quiz,
+    won: row.won,
+    bets: row.bets,
+    // Доля угаданных исходов в процентах; null, пока рассчитанных прогнозов на исход меньше 6
+    accuracy: row.accuracy == null ? null : Math.round(row.accuracy * 100),
     // Положительное число — поднялся на столько мест, отрицательное — опустился
     change: previous == null ? null : previous - row.rank,
   };
@@ -88,7 +104,7 @@ export async function publicProfile(db, userId) {
   const row = await db
     .prepare(
       `${rankedSql(null)}SELECT u.id, u.username, u.first_name, u.last_name, u.nickname, u.photo_url, u.created_at, ` +
-      "r.score AS balance, r.rank, " +
+      "(SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE user_id = u.id) AS balance, r.rank, r.quiz, r.won, r.bets, r.accuracy, " +
       "(SELECT COALESCE(SUM(CASE WHEN amount > 0 THEN amount END), 0) FROM transactions WHERE user_id = u.id) AS earned, " +
       "(SELECT COALESCE(-SUM(CASE WHEN amount < 0 THEN amount END), 0) FROM transactions WHERE user_id = u.id) AS spent " +
       "FROM users u JOIN ranked r ON r.id = u.id WHERE u.id = ?1",
@@ -104,6 +120,10 @@ export async function publicProfile(db, userId) {
     balance: toBist(row.balance),
     registered_at: row.created_at,
     rank: row.rank,
+    quiz: row.quiz,
+    won: row.won,
+    bets: row.bets,
+    accuracy: row.accuracy == null ? null : Math.round(row.accuracy * 100),
     stats: { earned: toBist(row.earned), spent: toBist(row.spent) },
   };
 }

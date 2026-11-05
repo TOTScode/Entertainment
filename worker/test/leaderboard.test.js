@@ -31,37 +31,63 @@ test("начало недели и месяца по Москве", () => {
   assert.equal(moscowDay(Date.UTC(2026, 9, 27, 21, 1) / 1000), "2026-10-28");
 });
 
-test("общая таблица: все пользователи по балансу, при равенстве выше старший", async () => {
+// Правильные ответы в викторинах: n штук в момент at
+function quizRight(db, userId, n, at) {
+  for (let i = 0; i < n; i++) {
+    const z = db.raw.prepare("INSERT INTO quizzes (title, reward, position, created_by, created_at, updated_at) VALUES ('Q', 0, 1, 1, 0, 0) RETURNING id").get().id;
+    const q = db.raw.prepare("INSERT INTO quiz_questions (quiz_id, position, text, answers) VALUES (?, 1, 'q', '[\"a\"]') RETURNING id").get(z).id;
+    db.raw.prepare("INSERT INTO quiz_answers (user_id, question_id, opened_at, attempts, correct, answered_at) VALUES (?, ?, ?, 1, 1, ?)").run(userId, q, at, at);
+  }
+}
+// Рассчитанные прогнозы: won угаданных и lost неугаданных на исход (market — 1x2 или score)
+function predictions(db, userId, won, lost, at, market = "1x2") {
+  const m = db.raw.prepare("INSERT INTO matches (tournament, home, away, start_time, status, updated_at) VALUES ('PL', 'A', 'B', ?, 'scheduled', 0) RETURNING id").get(at).id;
+  for (let i = 0; i < won + lost; i++) {
+    db.raw
+      .prepare("INSERT INTO predictions (user_id, match_id, market, outcome, stake, price, status, payout, created_at, updated_at, settled_at) VALUES (?, ?, ?, '1', 1, 2, ?, 0, ?, ?, ?)")
+      .run(userId, m, market, i < won ? "won" : "lost", at - 3600, at, at);
+  }
+}
+
+test("общая таблица: викторины, затем доля угаданных исходов (от 6 прогнозов), при равенстве выше старший", async () => {
   const db = createDb();
-  seed(db, [[1, NOW - 30 * DAY, "A"], [2, NOW - 20 * DAY, "B"], [3, NOW - 10 * DAY, "C"], [4, NOW - DAY, "D"]]);
-  tx(db, 3, 15, NOW - 5 * DAY);
-  tx(db, 2, -10, NOW - 5 * DAY, "bet"); // B с нулём всё равно в таблице
+  seed(db, [[1, NOW - 30 * DAY, "A"], [2, NOW - 20 * DAY, "B"], [3, NOW - 10 * DAY, "C"], [4, NOW - DAY, "D"], [5, NOW, "E"]]);
+  tx(db, 4, 500, NOW - DAY); // BIST на место не влияют
+  quizRight(db, 3, 2, NOW - DAY);
+  quizRight(db, 2, 1, NOW - DAY);
+  quizRight(db, 1, 1, NOW - DAY);
+  predictions(db, 1, 3, 3, NOW - DAY); // 50% из 6
+  predictions(db, 2, 2, 3, NOW - DAY); // 5 прогнозов — доля не считается
+  predictions(db, 5, 5, 1, NOW - DAY); // 83%, но без викторин
+  predictions(db, 5, 3, 0, NOW - DAY, "score"); // точный счёт не учитывается
   const board = await leaderboard(db, { userId: 4, ts: NOW });
-  assert.equal(board.total, 4);
-  assert.deepEqual(board.rows.map((r) => [r.rank, r.id, r.score]), [[1, 3, 25], [2, 1, 10], [3, 4, 10], [4, 2, 0]]);
-  assert.deepEqual([board.me.rank, board.me.name], [3, "D"]);
+  assert.equal(board.total, 5);
+  assert.deepEqual(
+    board.rows.map((r) => [r.rank, r.id, r.quiz, r.accuracy, r.won, r.bets]),
+    [[1, 3, 2, null, 0, 0], [2, 1, 1, 50, 3, 6], [3, 2, 1, null, 2, 5], [4, 5, 0, 83, 5, 6], [5, 4, 0, null, 0, 0]],
+  );
+  assert.deepEqual([board.me.rank, board.me.name], [5, "D"]);
 });
 
-test("неделя и месяц: сумма за период без бонуса за регистрацию", async () => {
+test("неделя и месяц: только ответы и рассчитанные прогнозы за период", async () => {
   const db = createDb();
   seed(db, [[1, NOW - 60 * DAY, "A"], [2, NOW - 60 * DAY, "B"], [3, NOW - DAY, "Новичок"]]);
-  tx(db, 1, 50, Date.UTC(2026, 8, 20) / 1000); // сентябрь: не в месяце и не в неделе
-  tx(db, 1, 5, Date.UTC(2026, 9, 26, 6) / 1000); // эта неделя
-  tx(db, 2, 8, Date.UTC(2026, 9, 10) / 1000); // этот месяц, прошлая неделя
-  tx(db, 2, -3, Date.UTC(2026, 9, 27) / 1000, "bet"); // эта неделя, списание
+  quizRight(db, 1, 5, Date.UTC(2026, 8, 20) / 1000); // сентябрь
+  quizRight(db, 1, 1, Date.UTC(2026, 9, 26, 6) / 1000); // эта неделя
+  quizRight(db, 2, 3, Date.UTC(2026, 9, 10) / 1000); // этот месяц, прошлая неделя
 
   const week = await leaderboard(db, { period: "week", userId: 3, ts: NOW });
-  assert.deepEqual(week.rows.map((r) => [r.id, r.score]), [[1, 5], [3, 0], [2, -3]]);
+  assert.deepEqual(week.rows.map((r) => [r.id, r.quiz]), [[1, 1], [2, 0], [3, 0]]);
   assert.equal(week.rows[0].change, null);
   assert.ok(week.since);
 
   const month = await leaderboard(db, { period: "month", userId: 3, ts: NOW });
-  assert.deepEqual(month.rows.map((r) => [r.id, r.score]), [[1, 5], [2, 5], [3, 0]]);
+  assert.deepEqual(month.rows.map((r) => [r.id, r.quiz]), [[2, 3], [1, 1], [3, 0]]);
   assert.equal(month.me.rank, 3);
 
   const all = await leaderboard(db, { period: "nonsense", userId: 3, ts: NOW });
   assert.equal(all.period, "all");
-  assert.deepEqual(all.rows.map((r) => [r.id, r.score]), [[1, 65], [2, 15], [3, 10]]);
+  assert.deepEqual(all.rows.map((r) => [r.id, r.quiz]), [[1, 6], [2, 3], [3, 0]]);
 });
 
 test("снимок рейтинга: изменение места за сутки, повторный снимок не меняет день", async () => {
@@ -70,7 +96,7 @@ test("снимок рейтинга: изменение места за сутк
   assert.equal((await leaderboard(db, { userId: 2, ts: NOW })).me.change, null);
 
   assert.equal(await takeSnapshot(db, NOW - DAY), "2026-10-27");
-  tx(db, 2, 5, NOW);
+  quizRight(db, 2, 1, NOW);
   assert.equal(await takeSnapshot(db, NOW - DAY), "2026-10-27"); // повтор не перезаписывает
   const board = await leaderboard(db, { userId: 2, ts: NOW });
   assert.deepEqual(board.rows.map((r) => [r.id, r.change]), [[2, 1], [1, -1]]);
