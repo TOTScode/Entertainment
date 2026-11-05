@@ -10,6 +10,7 @@ import {
   cancelPrediction, getMatch, listMatches, myPredictions, placePrediction, PredictionError,
 } from "./predictions.js";
 import { sync } from "./sync.js";
+import { answerQuestion, openQuestion, pastQuiz, QuizError, quizState, serveMedia } from "./quizzes.js";
 import { history, leaderboard, publicProfile, takeSnapshot } from "./leaderboard.js";
 import { displayName, getUser, registerOrUpdate, setNickname, telegramName, validateNickname, yearsSince } from "./users.js";
 
@@ -96,8 +97,21 @@ async function handleApi(request, env, path) {
     if (cancelPath && request.method === "POST") {
       return json(await cancelPrediction(env.DB, user.id, Number(cancelPath[1]), now));
     }
+
+    // --- викторины ---
+    if (path === "/api/quiz" && request.method === "GET") return json(await quizState(env.DB, user.id, now));
+    const quizPath = /^\/api\/quizzes\/(\d+)$/.exec(path);
+    if (quizPath && request.method === "GET") return json(await pastQuiz(env.DB, user.id, Number(quizPath[1]), now));
+    const questionPath = /^\/api\/quiz\/questions\/(\d+)\/(open|answer)$/.exec(path);
+    if (questionPath && request.method === "POST") {
+      const id = Number(questionPath[1]);
+      if (questionPath[2] === "open") return json(await openQuestion(env.DB, user.id, id, now));
+      const body = await request.json().catch(() => ({}));
+      return json(await answerQuestion(env.DB, user.id, id, body.answer, now));
+    }
   } catch (e) {
     if (e instanceof PredictionError) return json({ error: e.message, ...e.extra }, e.status);
+    if (e instanceof QuizError) return json({ error: e.message }, e.status);
     throw e;
   }
 
@@ -125,6 +139,9 @@ export default {
     }
 
     if (url.pathname.startsWith("/api/")) return handleApi(request, env, url.pathname);
+    // Файлы к вопросам викторин: адрес со случайным token появляется у игрока только после открытия вопроса
+    const media = /^\/media\/([a-f0-9]{32})$/.exec(url.pathname);
+    if (media && request.method === "GET") return serveMedia(env.DB, (env.BOT_TOKEN || "").trim(), media[1], request);
     return env.ASSETS.fetch(request);
   },
 

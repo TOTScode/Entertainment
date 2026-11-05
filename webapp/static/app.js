@@ -77,6 +77,10 @@ function openTab(name) {
   for (const t of TABS) $(`tab-${t}`).classList.toggle("hidden", t !== name);
   if (name === "table") loadBoard();
   if (name === "predictions") loadPredictionsTab();
+  if (name === "quizzes") {
+    loadQuiz();
+    if (me.is_admin) loadQuizAdmin();
+  }
   document.querySelectorAll("#nav button").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
   try { localStorage.setItem("tots_tab", name); } catch {}
 }
@@ -103,6 +107,7 @@ function renderProfile() {
     $("stat-earned").textContent = `+${fmt(me.stats.earned)}`;
     $("stat-spent").textContent = `−${fmt(me.stats.spent)}`;
   }
+  renderQualify();
 }
 
 // BIST показываем с одним знаком после запятой, лишние знаки отбрасываем: 19.37 → 19.3
@@ -284,6 +289,12 @@ function appendHistory(list, items) {
     li.className = "hist";
     const label = document.createElement("span");
     label.textContent = TX_LABELS[t.type] || t.type;
+    if (t.quiz) {
+      const sub = document.createElement("span");
+      sub.className = "reason";
+      sub.textContent = t.quiz;
+      label.appendChild(sub);
+    }
     if (t.match) {
       const sub = document.createElement("span");
       sub.className = "reason";
@@ -929,14 +940,468 @@ function initPredictions() {
   $("bet-dialog").addEventListener("click", (e) => e.target === e.currentTarget && closeBet());
 }
 
+// --- викторины ---
+
+const BOT_APP = "https://t.me/TOTS_official_bot/entertain";
+let quiz = null; // состояние вкладки из /api/quiz
+let quizTimer = null;
+let quizAdmin = null; // очередь и настройки для админки
+let editingQuiz = null; // id викторины в правке
+
+function renderQualify() {
+  const need = quiz?.qualify || 100;
+  const have = Math.min(me.balance, need);
+  const done = me.balance >= need;
+  $("qualify").classList.toggle("done", done);
+  $("qualify-num").textContent = `${fmt(me.balance)} / ${need} BIST`;
+  $("qualify-bar").style.width = `${(have / need) * 100}%`;
+  $("qualify-text").textContent = done
+    ? "✅ Вы проходите в финальную викторину сезона. Призы получат три лучших участника финала."
+    : `Наберите ${need} BIST, чтобы пройти в финальную викторину сезона. Осталось ${fmt(need - me.balance)}. Призы получат три лучших участника финала.`;
+}
+
+function mediaEl(media) {
+  const box = document.createElement("div");
+  box.className = "q-media";
+  let el;
+  if (media.kind === "image") {
+    el = document.createElement("img");
+    el.alt = "";
+  } else if (media.kind === "audio" || media.kind === "video") {
+    el = document.createElement(media.kind);
+    el.controls = true;
+    el.preload = "metadata";
+    if (media.kind === "video") el.playsInline = true;
+  } else {
+    el = document.createElement("a");
+    el.target = "_blank";
+    el.rel = "noopener";
+    el.textContent = `📎 ${media.name || "Открыть файл"}`;
+    el.href = media.url;
+  }
+  if (el.tagName !== "A") el.src = media.url;
+  box.appendChild(el);
+  return box;
+}
+
+function left(ts) {
+  const s = Math.max(0, Math.round(ts - serverNow()));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  return h ? `${h} ч ${m} мин` : `${m} мин`;
+}
+
+function questionEl(q, i, live) {
+  const box = document.createElement("div");
+  box.className = "question";
+  const head = document.createElement("div");
+  head.className = "q-num";
+  head.innerHTML = "<span></span><span></span>";
+  head.firstChild.textContent = `Вопрос ${i + 1}`;
+  box.appendChild(head);
+
+  if (q.text !== undefined) {
+    if (q.media) box.appendChild(mediaEl(q.media));
+    if (q.text) {
+      const t = document.createElement("div");
+      t.className = "q-text";
+      t.textContent = q.text;
+      box.appendChild(t);
+    }
+  }
+  const result = document.createElement("div");
+  result.className = "q-result";
+  if (q.correct) result.innerHTML = `<span class="plus">✅ Верно</span>`;
+  else if (q.done && q.answer) result.innerHTML = `<span class="minus">❌ Неверно</span>`;
+  else if (q.done) result.innerHTML = `<span class="minus">⌛ Время вышло</span>`;
+  if (q.answer) result.append(` · ваш ответ: «${q.answer}»`);
+  if (q.answers) {
+    const right = document.createElement("div");
+    right.className = "muted small";
+    right.textContent = `Правильный ответ: ${q.answers.join(" / ")}`;
+    result.appendChild(right);
+  }
+  if (result.childNodes.length) box.appendChild(result);
+  if (!live) return box;
+
+  if (!q.opened) {
+    const note = document.createElement("div");
+    note.className = "muted small";
+    const s = quiz.settings;
+    note.textContent = [
+      s.time_limit ? `После открытия будет ${s.time_limit} сек на ответ.` : "Время на ответ не ограничено.",
+      s.attempts > 1 ? `Попыток: ${s.attempts}.` : "Одна попытка.",
+    ].join(" ");
+    const btn = document.createElement("button");
+    btn.className = "btn wide";
+    btn.textContent = "Открыть вопрос";
+    btn.onclick = () => openQuizQuestion(q.id, btn);
+    box.append(note, btn);
+  } else if (!q.done) {
+    const input = document.createElement("input");
+    input.className = "input";
+    input.maxLength = 200;
+    input.placeholder = "Ваш ответ";
+    input.autocomplete = "off";
+    const btn = document.createElement("button");
+    btn.className = "btn wide";
+    btn.textContent = "Ответить";
+    const msg = document.createElement("div");
+    msg.className = "msg hidden";
+    const send = () => answerQuizQuestion(q.id, input, btn, msg);
+    btn.onclick = send;
+    input.addEventListener("keydown", (e) => e.key === "Enter" && send());
+    if (q.deadline) {
+      head.lastChild.className = "q-timer";
+      head.lastChild.dataset.deadline = q.deadline;
+    }
+    if (q.attempts_left > 1 || quiz.settings.attempts > 1) {
+      const a = document.createElement("div");
+      a.className = "muted small";
+      a.textContent = `Осталось попыток: ${q.attempts_left}`;
+      box.appendChild(a);
+    }
+    box.append(input, btn, msg);
+  }
+  return box;
+}
+
+function renderQuiz() {
+  renderQualify();
+  const box = $("quiz-current");
+  box.innerHTML = "";
+  const z = quiz.current;
+  const card = document.createElement("div");
+  card.className = "card";
+  if (!z) {
+    card.className = "card soon";
+    card.innerHTML = '<div class="soon-icon">🧠</div><h2>Викторины</h2><p class="muted">Новая викторина появится здесь в 00:00 по Москве.</p>';
+  } else {
+    const head = document.createElement("div");
+    head.className = "quiz-head";
+    head.innerHTML = "<h2></h2><div class='muted'></div>";
+    head.firstChild.textContent = z.title;
+    const right = z.questions.filter((q) => q.correct).length;
+    head.lastChild.textContent =
+      `${z.reward > 0 ? `${fmt(z.reward)} BIST за правильный ответ · ` : ""}верно ${right} из ${z.questions.length} · ` +
+      `сменится через ${left(z.ends_at)}`;
+    card.appendChild(head);
+    z.questions.forEach((q, i) => card.appendChild(questionEl(q, i, true)));
+  }
+  box.appendChild(card);
+
+  const past = $("quiz-past");
+  past.innerHTML = "";
+  for (const p of quiz.past) {
+    const li = document.createElement("li");
+    li.className = "past";
+    li.innerHTML = "<span></span><b></b>";
+    li.firstChild.textContent = p.title;
+    li.lastChild.textContent = `${p.right} / ${p.total}`;
+    li.onclick = () => openPastQuiz(p.id);
+    past.appendChild(li);
+  }
+  $("quiz-past-card").classList.toggle("hidden", !quiz.past.length);
+
+  clearInterval(quizTimer);
+  quizTimer = setInterval(tickQuiz, 1000);
+  tickQuiz();
+}
+
+// Таймеры открытых вопросов; когда время вышло или викторина сменилась — обновляем экран
+function tickQuiz() {
+  if ($("tab-quizzes").classList.contains("hidden")) return;
+  let expired = false;
+  document.querySelectorAll("#quiz-current .q-timer").forEach((el) => {
+    const s = Math.ceil(Number(el.dataset.deadline) - serverNow());
+    el.textContent = s > 0 ? `⏱ ${s} сек` : "⏱ 0 сек";
+    if (s <= -5) expired = true;
+  });
+  if (expired || (quiz?.current && quiz.current.ends_at <= serverNow())) {
+    clearInterval(quizTimer);
+    loadQuiz();
+  }
+}
+
+async function loadQuiz() {
+  try {
+    quiz = await api("/api/quiz");
+    renderQuiz();
+  } catch (e) {
+    $("quiz-current").innerHTML = "";
+    const el = document.createElement("div");
+    el.className = "card error";
+    el.textContent = e.message;
+    $("quiz-current").appendChild(el);
+  }
+}
+
+function replaceQuestion(q) {
+  const list = quiz.current?.questions || [];
+  const i = list.findIndex((x) => x.id === q.id);
+  if (i >= 0) list[i] = q;
+}
+
+async function openQuizQuestion(id, btn) {
+  btn.disabled = true;
+  try {
+    const res = await api(`/api/quiz/questions/${id}/open`, { method: "POST" });
+    replaceQuestion(res.question);
+    renderQuiz();
+    const input = [...document.querySelectorAll("#quiz-current .question input")].pop();
+    input?.focus();
+  } catch (e) {
+    btn.disabled = false;
+    loadQuiz();
+  }
+}
+
+async function answerQuizQuestion(id, input, btn, msg) {
+  if (!input.value.trim()) return;
+  btn.disabled = true;
+  try {
+    const res = await api(`/api/quiz/questions/${id}/answer`, { method: "POST", body: JSON.stringify({ answer: input.value }) });
+    replaceQuestion(res.question);
+    if (res.correct) {
+      me.balance = res.balance;
+      renderProfile();
+      resetHistory();
+      tg?.HapticFeedback?.notificationOccurred("success");
+    } else {
+      tg?.HapticFeedback?.notificationOccurred("error");
+    }
+    renderQuiz();
+  } catch (e) {
+    showMsg(msg, e.message, false);
+    btn.disabled = false;
+  }
+}
+
+async function openPastQuiz(id) {
+  $("qd-title").textContent = "";
+  $("qd-sub").textContent = "Загрузка…";
+  $("qd-questions").innerHTML = "";
+  $("quiz-dialog").classList.remove("hidden");
+  try {
+    const z = await api(`/api/quizzes/${id}`);
+    $("qd-title").textContent = z.title;
+    const right = z.questions.filter((q) => q.correct).length;
+    $("qd-sub").textContent = z.ended ? `Вы ответили верно на ${right} из ${z.questions.length}` : "Викторина ещё идёт, ответы появятся после смены";
+    z.questions.forEach((q, i) => $("qd-questions").appendChild(questionEl(q, i, false)));
+  } catch (e) {
+    $("qd-sub").textContent = e.message;
+  }
+}
+
+// --- админка викторин ---
+
+function fmtWhen(ts) {
+  return new Date(ts * 1000).toLocaleString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Moscow" });
+}
+
+async function loadQuizAdmin(data) {
+  try {
+    quizAdmin = data || (await api("/api/admin/quizzes"));
+  } catch (e) {
+    showMsg($("qa-msg"), e.message, false);
+    return;
+  }
+  const s = quizAdmin.settings;
+  $("qs-every").value = s.every_days;
+  $("qs-time").value = s.time_limit;
+  $("qs-attempts").value = s.attempts;
+  const list = $("qa-queue");
+  list.innerHTML = "";
+  const live = quizAdmin.quizzes.filter((z) => z.status !== "ended");
+  if (!live.length) list.innerHTML = '<li class="muted">Очередь пуста. Добавьте викторину ниже.</li>';
+  live.forEach((z) => {
+    const li = document.createElement("li");
+    li.className = "qa-item";
+    const info = document.createElement("span");
+    info.className = "qa-info";
+    info.textContent = `${z.title} · ${z.questions.length} вопр.`;
+    if (z.status === "current") info.insertAdjacentHTML("beforeend", '<span class="badge">сейчас</span>');
+    const when = document.createElement("span");
+    when.className = "qa-when";
+    when.textContent = `${z.status === "current" ? `до ${fmtWhen(z.ends_at)}` : `${fmtWhen(z.starts_at)} — ${fmtWhen(z.ends_at)}`} МСК` +
+      (z.status === "current" ? ` · играли ${z.players}` : "");
+    info.appendChild(when);
+    const actions = document.createElement("span");
+    actions.className = "qa-actions";
+    const btn = (label, title, fn) => {
+      const b = document.createElement("button");
+      b.className = "icon-btn";
+      b.textContent = label;
+      b.title = title;
+      b.onclick = fn;
+      actions.appendChild(b);
+    };
+    if (z.status === "queued") {
+      btn("↑", "Раньше", () => quizAdminCall(`/api/admin/quizzes/${z.id}/move`, "POST", { dir: "up" }));
+      btn("↓", "Позже", () => quizAdminCall(`/api/admin/quizzes/${z.id}/move`, "POST", { dir: "down" }));
+    }
+    btn("🔗", "Скопировать ссылку для поста", () => copyQuizLink(z.id));
+    btn("✏️", "Изменить", () => editQuiz(z));
+    btn("🗑", z.status === "current" ? "Снять (следующая начнётся сразу)" : "Удалить", () => {
+      const q = z.status === "current"
+        ? `Снять «${z.title}»? Следующая викторина начнётся сразу.`
+        : `Удалить «${z.title}» из очереди?`;
+      if (confirm(q)) quizAdminCall(`/api/admin/quizzes/${z.id}`, "DELETE");
+    });
+    li.append(info, actions);
+    list.appendChild(li);
+  });
+}
+
+function copyQuizLink(id) {
+  const link = `${BOT_APP}?startapp=quiz_${id}`;
+  navigator.clipboard?.writeText(link).then(
+    () => showMsg($("qa-msg"), `Ссылка скопирована: ${link}`, true),
+    () => showMsg($("qa-msg"), link, true),
+  );
+  if (!navigator.clipboard) showMsg($("qa-msg"), link, true);
+}
+
+async function quizAdminCall(path, method, body) {
+  try {
+    const data = await api(path, { method, ...(body ? { body: JSON.stringify(body) } : {}) });
+    await loadQuizAdmin(data);
+    loadQuiz();
+    return data;
+  } catch (e) {
+    showMsg($("qa-msg"), e.message, false);
+    throw e;
+  }
+}
+
+function questionForm(q = {}) {
+  const box = document.createElement("div");
+  box.className = "qa-q";
+  box.dataset.id = q.id || "";
+  box.dataset.media = q.media_id || "";
+  box.innerHTML = `
+    <div class="qa-q-head"><span class="qa-n"></span><button class="icon-btn qa-del" title="Убрать вопрос">✕</button></div>
+    <textarea class="input qa-text" maxlength="2000" placeholder="Текст вопроса"></textarea>
+    <div class="qa-file"><input type="file" accept="image/*,audio/*,video/*,*/*"><span class="qa-file-name muted"></span><button class="icon-btn qa-file-del hidden" title="Убрать файл">✕</button></div>
+    <textarea class="input qa-answers" placeholder="Правильные ответы, каждый вариант с новой строки"></textarea>`;
+  box.querySelector(".qa-text").value = q.text || "";
+  box.querySelector(".qa-answers").value = (q.answers || []).join("\n");
+  const name = box.querySelector(".qa-file-name");
+  const del = box.querySelector(".qa-file-del");
+  const setFile = (label) => {
+    name.textContent = label || "";
+    del.classList.toggle("hidden", !box.dataset.media);
+  };
+  setFile(q.media ? `📎 ${q.media.name || q.media.kind}` : "");
+  box.querySelector(".qa-del").onclick = () => { box.remove(); numberQuestions(); };
+  del.onclick = () => { box.dataset.media = ""; box.querySelector("input[type=file]").value = ""; setFile(""); };
+  box.querySelector("input[type=file]").onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.size > 20 * 1024 * 1024) { setFile("Файл больше 20 МБ"); return; }
+    setFile("Загрузка…");
+    $("qa-save").disabled = true;
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch("/api/admin/media", { method: "POST", body: form, headers: { "X-Telegram-Init-Data": tg?.initData || "" } });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Не удалось загрузить файл");
+      box.dataset.media = data.id;
+      setFile(`📎 ${file.name}`);
+    } catch (err) {
+      box.dataset.media = "";
+      setFile(err.message);
+    } finally {
+      $("qa-save").disabled = false;
+    }
+  };
+  return box;
+}
+
+function numberQuestions() {
+  document.querySelectorAll("#qa-questions .qa-n").forEach((el, i) => (el.textContent = `Вопрос ${i + 1}`));
+}
+
+function resetQuizForm() {
+  editingQuiz = null;
+  $("qa-form-title").textContent = "Новая викторина";
+  $("qa-save").textContent = "Добавить в очередь";
+  $("qa-cancel").classList.add("hidden");
+  $("qa-title").value = "";
+  $("qa-reward").value = 1;
+  $("qa-questions").innerHTML = "";
+  $("qa-questions").appendChild(questionForm());
+  numberQuestions();
+}
+
+function editQuiz(z) {
+  editingQuiz = z.id;
+  $("qa-form-title").textContent = `Правка: ${z.title}`;
+  $("qa-save").textContent = "Сохранить изменения";
+  $("qa-cancel").classList.remove("hidden");
+  $("qa-title").value = z.title;
+  $("qa-reward").value = z.reward;
+  $("qa-questions").innerHTML = "";
+  z.questions.forEach((q) => $("qa-questions").appendChild(questionForm(q)));
+  numberQuestions();
+  $("qa-msg").classList.add("hidden");
+  $("qa-form-title").scrollIntoView({ behavior: "smooth" });
+}
+
+async function saveQuiz() {
+  const body = {
+    title: $("qa-title").value,
+    reward: Number($("qa-reward").value),
+    questions: [...document.querySelectorAll("#qa-questions .qa-q")].map((b) => ({
+      id: Number(b.dataset.id) || null,
+      text: b.querySelector(".qa-text").value,
+      media_id: Number(b.dataset.media) || null,
+      answers: b.querySelector(".qa-answers").value,
+    })),
+  };
+  const btn = $("qa-save");
+  btn.disabled = true;
+  try {
+    const editing = editingQuiz;
+    await quizAdminCall(editing ? `/api/admin/quizzes/${editing}` : "/api/admin/quizzes", editing ? "PUT" : "POST", body);
+    resetQuizForm();
+    showMsg($("qa-msg"), editing ? "Изменения сохранены" : "Викторина добавлена в очередь", true);
+  } catch {} finally {
+    btn.disabled = false;
+  }
+}
+
+function initQuizzes() {
+  $("qd-close").onclick = () => $("quiz-dialog").classList.add("hidden");
+  $("quiz-dialog").addEventListener("click", (e) => e.target === e.currentTarget && e.target.classList.add("hidden"));
+  if (!me.is_admin) return;
+  $("quiz-admin").classList.remove("hidden");
+  $("qs-save").onclick = async () => {
+    try {
+      await quizAdminCall("/api/admin/quiz-settings", "POST", {
+        every_days: Number($("qs-every").value), time_limit: Number($("qs-time").value), attempts: Number($("qs-attempts").value),
+      });
+      showMsg($("qs-msg"), "Настройки сохранены, очередь пересчитана", true);
+    } catch (e) {
+      showMsg($("qs-msg"), e.message, false);
+    }
+  };
+  $("qa-add").onclick = () => { $("qa-questions").appendChild(questionForm()); numberQuestions(); };
+  $("qa-save").onclick = saveQuiz;
+  $("qa-cancel").onclick = resetQuizForm;
+  resetQuizForm();
+}
+
 // --- запуск ---
 
 function startTab() {
   // Ссылки вида t.me/<бот>/<app>?startapp=quiz_<id> открывают нужный раздел
   const param = tg?.initDataUnsafe?.start_param || "";
-  const quiz = /^quiz_(\w+)$/.exec(param);
-  if (quiz) {
-    $("quiz-soon").textContent = `Викторина #${quiz[1]} откроется здесь, как только раздел заработает.`;
+  const link = /^quiz_(\d+)$/.exec(param);
+  if (link) {
+    // Прошедшая викторина открывается с ответами, текущая — просто на вкладке
+    api("/api/quiz").then((s) => s.current?.id !== Number(link[1]) && openPastQuiz(Number(link[1]))).catch(() => {});
     return "quizzes";
   }
   if (/^(predictions|table|profile|quizzes)$/.test(param)) return param;
@@ -987,6 +1452,7 @@ async function init() {
     loadBoard();
   }));
   initPredictions();
+  initQuizzes();
   // Подгрузка истории при прокрутке до конца списка
   new IntersectionObserver(([e]) => e.isIntersecting && loadHistory()).observe($("history-more"));
   loadHistory();

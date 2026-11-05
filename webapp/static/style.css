@@ -184,3 +184,38 @@ h3 { font-size: 16px; }
 .rules { margin-top: 12px; font-size: 12px; }
 .pred-item { cursor: pointer; }
 .pred-item .hist-sub { display: block; font-size: 13px; opacity: .85; }
+/* --- викторины --- */
+.qualify-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+.qualify-head span { color: var(--gold); font-weight: 700; white-space: nowrap; }
+.progress { height: 8px; border-radius: 999px; background: var(--bg); overflow: hidden; margin-bottom: 8px; }
+.progress div { height: 100%; width: 0; background: var(--gold); border-radius: 999px; transition: width .3s; }
+.qualify .small { margin: 0; }
+.qualify.done { border: 1px solid var(--gold); }
+.quiz-head h2 { font-size: 20px; margin-bottom: 4px; }
+.quiz-head .muted { margin-bottom: 10px; }
+.question { border-top: 1px solid var(--bg); padding: 12px 0 4px; }
+.question:first-of-type { border-top: 0; }
+.question .q-num { font-size: 13px; color: var(--hint); margin-bottom: 6px; display: flex; justify-content: space-between; gap: 8px; }
+.question .q-text { font-size: 16px; white-space: pre-line; margin-bottom: 8px; }
+.question .q-result { font-size: 14px; margin: 6px 0; }
+.question .q-timer { color: var(--gold); font-weight: 700; }
+.q-media { margin-bottom: 8px; }
+.q-media img, .q-media video { display: block; max-width: 100%; max-height: 50vh; border-radius: 10px; background: var(--bg); }
+.q-media audio { width: 100%; }
+.q-media a { color: var(--accent); }
+.list li.past { cursor: pointer; display: flex; justify-content: space-between; gap: 8px; }
+#quiz-dialog .sheet { max-height: 90vh; overflow-y: auto; }
+.settings-grid { display: grid; grid-template-columns: 1fr; gap: 0; }
+.settings-grid label, #quiz-admin label { display: block; font-size: 13px; color: var(--hint); }
+.settings-grid .input, #quiz-admin label .input { margin-top: 4px; }
+.qa-item { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.qa-item .qa-info { min-width: 0; }
+.qa-item .qa-when { display: block; font-size: 12px; color: var(--hint); }
+.qa-item .qa-actions { display: flex; gap: 2px; flex-shrink: 0; }
+.qa-q { background: var(--bg); border-radius: 12px; padding: 10px; margin-bottom: 8px; }
+.qa-q .input { background: var(--card); }
+.qa-q-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-size: 13px; color: var(--hint); }
+.qa-q textarea { resize: vertical; min-height: 60px; font-family: inherit; }
+.qa-file { font-size: 13px; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.qa-file input[type=file] { max-width: 100%; color: var(--hint); }
+.badge { display: inline-block; font-size: 11px; padding: 2px 6px; border-radius: 6px; background: var(--accent); color: var(--accent-text); margin-left: 4px; vertical-align: middle; }

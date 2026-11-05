@@ -5,6 +5,7 @@ import { addTransaction, getUser, LedgerError, searchUsers, displayName } from "
 import { history } from "./leaderboard.js";
 import { toBist, toUnits } from "./money.js";
 import { correctionStatements } from "./predictions.js";
+import { adminQuizzes, createQuiz, deleteQuiz, moveQuiz, QuizError, saveSettings, updateQuiz, uploadMedia } from "./quizzes.js";
 
 const MAX_ADJUSTMENT = 100000;
 
@@ -102,6 +103,31 @@ export async function handleAdmin(request, env, admin, path, json) {
         ),
     ]);
     return json({ ok: true });
+  }
+
+  // --- викторины ---
+  if (path.startsWith("/api/admin/quiz") || path === "/api/admin/media") {
+    const now = Math.floor(Date.now() / 1000);
+    try {
+      if (path === "/api/admin/quizzes" && request.method === "GET") return json(await adminQuizzes(db, now));
+      if (path === "/api/admin/quizzes" && request.method === "POST") {
+        const id = await createQuiz(db, admin.id, await request.json().catch(() => ({})), now);
+        return json({ id, ...(await adminQuizzes(db, now)) });
+      }
+      const one = /^\/api\/admin\/quizzes\/(\d+)(?:\/(move))?$/.exec(path);
+      if (one && request.method === "PUT" && !one[2]) await updateQuiz(db, Number(one[1]), await request.json().catch(() => ({})), now);
+      else if (one && request.method === "DELETE" && !one[2]) await deleteQuiz(db, Number(one[1]), now);
+      else if (one && request.method === "POST" && one[2]) await moveQuiz(db, Number(one[1]), (await request.json().catch(() => ({}))).dir, now);
+      else if (path === "/api/admin/quiz-settings" && request.method === "POST") await saveSettings(db, await request.json().catch(() => ({})), now);
+      else if (path === "/api/admin/media" && request.method === "POST") {
+        const form = await request.formData().catch(() => null);
+        return json(await uploadMedia(db, (env.BOT_TOKEN || "").trim(), admin.id, form?.get("file"), now));
+      } else return json({ error: "Не найдено" }, 404);
+      return json(await adminQuizzes(db, now));
+    } catch (e) {
+      if (e instanceof QuizError) return json({ error: e.message }, e.status);
+      throw e;
+    }
   }
 
   // История операций любого пользователя, для карточки участника в админке

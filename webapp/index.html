@@ -19,10 +19,40 @@
 
     <!-- Викторины -->
     <section id="tab-quizzes" class="tab hidden">
-      <div class="card soon">
-        <div class="soon-icon">🧠</div>
-        <h2>Викторины</h2>
-        <p id="quiz-soon" class="muted">Скоро здесь появятся ежедневные викторины с наградами в BIST.</p>
+      <!-- Квалификация в финал сезона: видна всегда -->
+      <div id="qualify" class="card qualify">
+        <div class="qualify-head"><b>🏆 Финал сезона</b><span id="qualify-num"></span></div>
+        <div class="progress"><div id="qualify-bar"></div></div>
+        <div id="qualify-text" class="muted small"></div>
+      </div>
+      <div id="quiz-current"><div class="card muted">Загрузка…</div></div>
+      <div id="quiz-past-card" class="card hidden">
+        <h3>Прошлые викторины</h3>
+        <ul id="quiz-past" class="list"></ul>
+      </div>
+
+      <!-- Управление викторинами: только администраторам -->
+      <div id="quiz-admin" class="card hidden">
+        <h3>🛠 Викторины</h3>
+        <div class="settings-grid">
+          <label>Смена раз в, дней<input id="qs-every" class="input" type="number" min="1" max="30" step="1" inputmode="numeric"></label>
+          <label>Секунд на вопрос (0 — без таймера)<input id="qs-time" class="input" type="number" min="0" max="3600" step="1" inputmode="numeric"></label>
+          <label>Попыток на вопрос<input id="qs-attempts" class="input" type="number" min="1" max="10" step="1" inputmode="numeric"></label>
+        </div>
+        <button id="qs-save" class="btn wide ghost">Сохранить настройки</button>
+        <div id="qs-msg" class="msg hidden"></div>
+
+        <h3 class="mt">Очередь</h3>
+        <ul id="qa-queue" class="list"></ul>
+
+        <h3 id="qa-form-title" class="mt">Новая викторина</h3>
+        <input id="qa-title" class="input" maxlength="120" placeholder="Название, например «Легенды Ливерпуля»">
+        <label class="muted small">Награда за правильный ответ, BIST<input id="qa-reward" class="input" type="number" min="0" max="100" step="0.1" inputmode="decimal" value="1"></label>
+        <div id="qa-questions"></div>
+        <button id="qa-add" class="btn wide ghost">+ Вопрос</button>
+        <button id="qa-save" class="btn wide">Добавить в очередь</button>
+        <button id="qa-cancel" class="btn wide ghost hidden">Отменить правку</button>
+        <div id="qa-msg" class="msg hidden"></div>
       </div>
     </section>
 
@@ -204,6 +234,18 @@
         <button id="fix-apply" class="btn wide">Пересчитать прогнозы</button>
         <div id="fix-msg" class="msg hidden"></div>
       </div>
+    </div>
+  </div>
+
+  <!-- Прошедшая викторина с правильными ответами -->
+  <div id="quiz-dialog" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="qd-title">
+    <div class="sheet">
+      <div class="sheet-head">
+        <h3 id="qd-title"></h3>
+        <button id="qd-close" class="icon-btn" aria-label="Закрыть">✕</button>
+      </div>
+      <div id="qd-sub" class="muted small"></div>
+      <div id="qd-questions"></div>
     </div>
   </div>
 

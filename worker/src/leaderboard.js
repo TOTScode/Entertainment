@@ -139,11 +139,14 @@ export async function history(db, userId, { before = null, limit = 30 } = {}) {
     .prepare(
       // Для корректировок администратора подтягиваем причину из журнала действий администраторов
       "SELECT t.id, t.amount, t.type, t.created_at, a.reason, " +
-      "m.home || ' — ' || m.away AS match, p.market, p.outcome FROM transactions t " +
+      "m.home || ' — ' || m.away AS match, p.market, p.outcome, qz.title AS quiz FROM transactions t " +
       "LEFT JOIN audit_log a ON t.ref = 'audit:' || a.id " +
       // Для операций по прогнозам — матч и исход (ref вида prediction:12 или prediction:12:v1)
       "LEFT JOIN predictions p ON t.ref LIKE 'prediction:%' AND p.id = CAST(substr(t.ref, 12) AS INTEGER) " +
       "LEFT JOIN matches m ON m.id = p.match_id " +
+      // Для наград за викторины — название викторины (ref вида quiz_question:7)
+      "LEFT JOIN quiz_questions qq ON t.type = 'quiz_reward' AND qq.id = CAST(substr(t.ref, 15) AS INTEGER) " +
+      "LEFT JOIN quizzes qz ON qz.id = qq.quiz_id " +
       "WHERE t.user_id = ? AND t.id < ? ORDER BY t.id DESC LIMIT ?",
     )
     .bind(userId, cursor, size + 1)
