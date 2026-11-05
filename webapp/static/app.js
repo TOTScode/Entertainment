@@ -458,12 +458,14 @@ let matchesCache = [];
 let bet = null; // открытое окно прогноза: { match, market, outcome }
 let betTimer = null;
 
+const activeOf = (match) => match.my.find((p) => p.status === "active");
+
 function outcomeLabel(market, outcome) {
   if (market === "score") return `счёт ${outcome}`;
   return { 1: "П1", X: "Ничья", 2: "П2" }[outcome] || outcome;
 }
 
-// Та же формула, что на сервере: ставка × коэффициент
+// Та же формула, что на сервере: ставка × вес прогноза
 function payoutOf(stake, price) {
   return Math.floor((stake * 10000 * Math.round(price * 100)) / 100) / 10000;
 }
@@ -488,11 +490,11 @@ function closedNote(m) {
   if (m.status === "cancelled") return "Матч отменён, прогнозы возвращены";
   if (m.status === "postponed") return "Матч перенесён, приём прогнозов закрыт";
   if (m.start_time <= serverNow()) return "Матч идёт, ждём результат";
-  return "Приём прогнозов закрыт: нет свежих коэффициентов";
+  return "Приём прогнозов закрыт: нет свежих данных по матчу";
 }
 
 function predLine(p) {
-  const what = `${outcomeLabel(p.market, p.outcome)} · ${fmt(p.stake)} BIST × ${p.price.toFixed(2)}`;
+  const what = `${outcomeLabel(p.market, p.outcome)} · ${fmt(p.stake)} BIST · вес ${p.price.toFixed(2)}`;
   if (p.status === "won") return `✅ ${what} · выигрыш ${fmt(p.payout)}`;
   if (p.status === "lost") return `❌ ${what} · не сыграл`;
   if (p.status === "refunded") return `↩️ ${what} · возврат`;
@@ -689,8 +691,8 @@ async function openBet(match, market, outcome = null) {
     if (bet?.match.id !== match.id) return;
     bet.match = full;
     bet.loading = false;
-    const current = full.my.find((p) => p.market === bet.market && p.status === "active");
-    if (current && !bet.outcome) bet.outcome = current.outcome;
+    const current = activeOf(full);
+    if (current?.market === bet.market && !bet.outcome) bet.outcome = current.outcome;
     if (current && !$("bet-stake").value) $("bet-stake").value = current.stake;
     renderBet();
   } catch (e) {
@@ -740,12 +742,14 @@ function renderBet() {
     b.onclick = () => { bet.outcome = o; renderBet(); };
     box.appendChild(b);
   }
-  if (!keys.length) box.innerHTML = `<div class="muted small">${bet.loading ? "Загрузка…" : "Коэффициентов на этот рынок нет"}</div>`;
+  if (!keys.length) box.innerHTML = `<div class="muted small">${bet.loading ? "Загрузка…" : "Вариантов для прогноза пока нет"}</div>`;
 
-  const current = m.my.find((p) => p.market === bet.market && p.status === "active");
-  const settled = m.my.filter((p) => p.market === bet.market && p.status !== "active");
+  const current = activeOf(m);
+  const settled = m.my.filter((p) => p.status !== "active");
   const cur = $("bet-current");
   const lines = [...(current ? [`Ваш прогноз: ${predLine(current)}`] : []), ...settled.map(predLine)];
+  // На матч — один прогноз: новый прогноз на другой рынок заменит текущий
+  if (current && m.open && current.market !== bet.market) lines.push("На матч можно сделать один прогноз: новый заменит текущий.");
   cur.textContent = lines.join("\n");
   cur.style.whiteSpace = "pre-line";
   cur.classList.toggle("hidden", !lines.length);
@@ -792,16 +796,16 @@ function updatePayout() {
   const el = $("bet-payout");
   if (!price) { el.textContent = ""; return; }
   if (!Number.isInteger(stake) || stake < STAKE_MIN || stake > STAKE_MAX) {
-    el.textContent = `${outcomeLabel(bet.market, bet.outcome)} × ${price.toFixed(2)} · ставка от ${STAKE_MIN} до ${STAKE_MAX} BIST, целым числом`;
+    el.textContent = `${outcomeLabel(bet.market, bet.outcome)} · вес ${price.toFixed(2)} · ставка от ${STAKE_MIN} до ${STAKE_MAX} BIST, целым числом`;
     return;
   }
   const payout = payoutOf(stake, price);
-  el.textContent = `${outcomeLabel(bet.market, bet.outcome)} × ${price.toFixed(2)} · при выигрыше получите ${fmt(payout)} BIST (+${fmt(payout - stake)})`;
+  el.textContent = `${outcomeLabel(bet.market, bet.outcome)} · вес ${price.toFixed(2)} · при выигрыше получите ${fmt(payout)} BIST (+${fmt(payout - stake)})`;
 }
 
 // Пока идёт пауза после прошлого действия, кнопки показывают обратный отсчёт
 function tickCooldown() {
-  const current = bet?.match.my.find((p) => p.market === bet.market && p.status === "active");
+  const current = bet && activeOf(bet.match);
   const wait = current ? Math.ceil(current.next_change_at - serverNow()) : 0;
   const submit = $("bet-submit");
   const cancel = $("bet-cancel");
@@ -848,7 +852,7 @@ async function submitBet() {
 }
 
 async function cancelBet() {
-  const current = bet.match.my.find((p) => p.market === bet.market && p.status === "active");
+  const current = activeOf(bet.match);
   if (!current) return;
   const btn = $("bet-cancel");
   btn.disabled = true;
@@ -907,8 +911,8 @@ function initPredictions() {
   document.querySelectorAll("#bet-markets button").forEach((b) => (b.onclick = () => {
     if (bet.market === b.dataset.market) return;
     bet.market = b.dataset.market;
-    const current = bet.match.my.find((p) => p.market === bet.market && p.status === "active");
-    bet.outcome = current?.outcome || null;
+    const current = activeOf(bet.match);
+    bet.outcome = current?.market === bet.market ? current.outcome : null;
     $("bet-stake").value = current ? current.stake : "";
     $("bet-msg").classList.add("hidden");
     renderBet();

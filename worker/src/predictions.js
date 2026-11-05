@@ -21,8 +21,8 @@ export class PredictionError extends Error {
   }
 }
 
-// Выплата = ставка × коэффициент, без комиссии.
-// Считается в целых числах: ставка кратна 1 BIST, коэффициент — с двумя знаками, поэтому результат точный.
+// Выплата = ставка × вес прогноза (коэффициент), без комиссии.
+// Считается в целых числах: ставка кратна 1 BIST, вес — с двумя знаками, поэтому результат точный.
 export function payoutUnits(stake, price) {
   return Math.floor((stake * Math.round(price * 100)) / 100);
 }
@@ -137,8 +137,8 @@ export async function myPredictions(db, userId, { scope = "active", before = nul
   return { items, next: results.length > 30 ? items[items.length - 1].id : null };
 }
 
-function cooldownLeft(rows, market, now) {
-  const last = rows.filter((p) => p.market === market).reduce((t, p) => Math.max(t, p.created_at, p.updated_at || 0), 0);
+function cooldownLeft(rows, now) {
+  const last = rows.reduce((t, p) => Math.max(t, p.created_at, p.updated_at || 0), 0);
   return last ? last + COOLDOWN - now : 0;
 }
 
@@ -150,7 +150,7 @@ function mapDbError(e) {
   return e;
 }
 
-// Новый прогноз или замена действующего на этом рынке. Ставка — целое число BIST.
+// Новый прогноз или замена действующего. На матч — один прогноз: на исход или на точный счёт. Ставка — целое число BIST.
 export async function placePrediction(db, userId, { match_id, market, outcome, stake }, now) {
   const matchId = Number(match_id);
   if (!MARKETS.includes(market)) throw new PredictionError("Неизвестный тип прогноза", 400);
@@ -161,14 +161,14 @@ export async function placePrediction(db, userId, { match_id, market, outcome, s
   const [match, odd, rows] = await db.batch([
     db.prepare("SELECT * FROM matches WHERE id = ?").bind(matchId),
     db.prepare("SELECT price FROM odds WHERE match_id = ? AND market = ? AND outcome = ?").bind(matchId, market, String(outcome)),
-    db.prepare("SELECT * FROM predictions WHERE match_id = ? AND user_id = ? AND market = ?").bind(matchId, userId, market),
+    db.prepare("SELECT * FROM predictions WHERE match_id = ? AND user_id = ?").bind(matchId, userId),
   ]);
   const m = match.results[0];
   if (!m) throw new PredictionError("Матч не найден", 404);
   if (!isOpen(m, now)) throw new PredictionError("Приём прогнозов на этот матч закрыт");
   const price = odd.results[0]?.price;
-  if (!price) throw new PredictionError("Нет коэффициента на этот исход", 400);
-  const wait = cooldownLeft(rows.results, market, now);
+  if (!price) throw new PredictionError("Этот исход сейчас недоступен", 400);
+  const wait = cooldownLeft(rows.results, now);
   if (wait > 0) throw new PredictionError(`Изменить прогноз можно через ${Math.ceil(wait / 60)} мин.`, 429, { retry_at: now + wait });
 
   const current = rows.results.find((p) => p.status === "active");
@@ -192,10 +192,10 @@ export async function placePrediction(db, userId, { match_id, market, outcome, s
     db
       .prepare(
         "INSERT INTO transactions (user_id, amount, type, ref, created_at) VALUES (?1, ?2, 'bet', " +
-        "'prediction:' || (SELECT id FROM predictions WHERE user_id = ?1 AND match_id = ?3 AND market = ?4 AND status = 'active'), ?5)",
+        "'prediction:' || (SELECT id FROM predictions WHERE user_id = ?1 AND match_id = ?3 AND status = 'active'), ?4)",
       )
-      .bind(userId, -units, matchId, market, now),
-    db.prepare("SELECT * FROM predictions WHERE user_id = ? AND match_id = ? AND market = ? AND status = 'active'").bind(userId, matchId, market),
+      .bind(userId, -units, matchId, now),
+    db.prepare("SELECT * FROM predictions WHERE user_id = ? AND match_id = ? AND status = 'active'").bind(userId, matchId),
     db.prepare("SELECT COALESCE(SUM(amount), 0) AS balance FROM transactions WHERE user_id = ?").bind(userId),
   );
   let results;

@@ -48,7 +48,7 @@ test("ставка: лимиты, баланс, коэффициент фикс�
   await assert.rejects(bet(0), /от 1 до 100/);
   await assert.rejects(bet(101), /от 1 до 100/);
   await assert.rejects(bet(1.5), /от 1 до 100/);
-  await assert.rejects(placePrediction(db, 1, { match_id: id, market: "1x2", outcome: "5", stake: 1 }, NOW), /Нет коэффициента/);
+  await assert.rejects(placePrediction(db, 1, { match_id: id, market: "1x2", outcome: "5", stake: 1 }, NOW), /недоступен/);
 
   db.raw.prepare("INSERT INTO transactions (user_id, amount, type, created_at) VALUES (2, ?, 'admin_adjustment', 0)").run(-95 * UNIT);
   await assert.rejects(bet(10, 2), /Недостаточно BIST/);
@@ -58,12 +58,26 @@ test("ставка: лимиты, баланс, коэффициент фикс�
   assert.equal(res.balance, 90);
   assert.equal(res.prediction.price, 2);
   assert.equal(res.prediction.payout, 20);
-  // Исход и точный счёт одновременно
-  await placePrediction(db, 1, { match_id: id, market: "score", outcome: "2:1", stake: 5 }, NOW);
-  assert.equal(balance(1), 85);
   // Новые коэффициенты не меняют уже принятый прогноз
   await saveOdds(db, "PL", [{ op_id: "op1", home: "Chelsea", away: "Manchester United", start_time: NOW + 3600, status: "scheduled", odds: [{ market: "1x2", outcome: "1", price: 1.5 }] }], NOW);
   assert.equal((await getMatch(db, 1, id, NOW)).my[0].price, 2);
+});
+
+test("на матч один прогноз: точный счёт заменяет исход", async () => {
+  const id = await addMatch();
+  await placePrediction(db, 1, { match_id: id, market: "1x2", outcome: "1", stake: 10 }, NOW);
+  // Пауза 5 минут действует на весь матч, а не на рынок
+  await assert.rejects(placePrediction(db, 1, { match_id: id, market: "score", outcome: "2:1", stake: 5 }, NOW + 60), /через/);
+  const res = await placePrediction(db, 1, { match_id: id, market: "score", outcome: "2:1", stake: 5 }, NOW + 300);
+  assert.equal(res.replaced, true);
+  assert.equal(res.balance, 95);
+  const rows = db.raw.prepare("SELECT market, status FROM predictions ORDER BY id").all().map((r) => `${r.market}:${r.status}`);
+  assert.deepEqual(rows, ["1x2:replaced", "score:active"]);
+  // База тоже не даст держать два действующих прогноза на матч
+  assert.throws(
+    () => db.raw.prepare("INSERT INTO predictions (user_id, match_id, market, outcome, stake, price, created_at, updated_at) VALUES (1, ?, '1x2', 'X', 1, 2, ?, ?)").run(id, NOW, NOW),
+    /UNIQUE/,
+  );
 });
 
 test("приём закрыт после начала матча и без свежих коэффициентов", async () => {
@@ -103,16 +117,18 @@ test("замена и отмена: не чаще раза в 5 минут, су
 
 test("расчёт: выигрыш по формуле, повторный расчёт ничего не начисляет", async () => {
   const id = await addMatch();
+  addUser(3);
   await placePrediction(db, 1, { match_id: id, market: "1x2", outcome: "1", stake: 10 }, NOW);
-  await placePrediction(db, 1, { match_id: id, market: "score", outcome: "2:1", stake: 10 }, NOW);
+  await placePrediction(db, 3, { match_id: id, market: "score", outcome: "2:1", stake: 10 }, NOW);
   await placePrediction(db, 2, { match_id: id, market: "1x2", outcome: "2", stake: 10 }, NOW);
   assert.equal(await settleMatch(db, match(id), [2, 1], NOW + 9000), true);
-  assert.equal(balance(1), 80 + 20 + 90);
+  assert.equal(balance(1), 90 + 20);
+  assert.equal(balance(3), 90 + 90);
   assert.equal(balance(2), 90);
   assert.equal(await settleMatch(db, match(id), [2, 1], NOW + 9100), false);
-  assert.equal(balance(1), 190);
+  assert.equal(balance(1), 110);
   const statuses = db.raw.prepare("SELECT user_id, market, status FROM predictions ORDER BY id").all().map((r) => `${r.user_id}${r.market}${r.status}`);
-  assert.deepEqual(statuses, ["11x2won", "1scorewon", "21x2lost"]);
+  assert.deepEqual(statuses, ["11x2won", "3scorewon", "21x2lost"]);
   assert.equal(match(id).status, "finished");
 });
 
