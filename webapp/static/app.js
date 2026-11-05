@@ -7,6 +7,7 @@ const TABS = ["quizzes", "predictions", "table", "profile"];
 let me = null;
 let adminTarget = null;
 let boardPeriod = "all";
+let boardSort = "points";
 let historyNext = undefined; // undefined — ещё не грузили, null — больше нет
 let historyLoading = false;
 let clockSkew = 0;
@@ -161,10 +162,11 @@ function boardRow(r) {
 let boardObserver = null;
 async function loadBoard() {
   const period = boardPeriod;
+  const sort = boardSort;
   const list = $("board");
   try {
-    const data = await api(`/api/leaderboard?period=${period}`);
-    if (period !== boardPeriod) return; // пока грузили, переключили вкладку
+    const data = await api(`/api/leaderboard?period=${period}&sort=${sort}`);
+    if (period !== boardPeriod || sort !== boardSort) return; // пока грузили, переключили вкладку или сортировку
     list.innerHTML = "";
     $("board-note").textContent =
       data.since == null ? `Участников: ${data.total}` :
@@ -220,7 +222,7 @@ async function openUser(row) {
   openUserId = row.id;
   for (const f of ["u-username", "u-tenure", "u-rank", "u-balance", "u-earned", "u-spent", "u-quiz", "u-acc"]) $(f).textContent = "";
   $("u-tenure").textContent = "\u00a0";
-  fillUser({ id: row.id, name: row.name, photo_url: row.photo_url, ...(boardPeriod === "all" ? { rank: row.rank, quiz: row.quiz, accuracy: row.accuracy } : {}) });
+  fillUser({ id: row.id, name: row.name, photo_url: row.photo_url, ...(boardPeriod === "all" && boardSort === "points" ? { rank: row.rank, quiz: row.quiz, accuracy: row.accuracy } : {}) });
   $("user-dialog").classList.remove("hidden");
   if (me.is_admin) {
     $("u-admin").classList.remove("hidden");
@@ -1460,6 +1462,12 @@ async function init() {
   }));
   initPredictions();
   initQuizzes();
+  // Тап по 🧠 или ⚽️ в шапке таблицы меняет сортировку
+  document.querySelectorAll(".board-head button").forEach((b) => (b.onclick = () => {
+    boardSort = b.dataset.sort;
+    document.querySelectorAll(".board-head button").forEach((x) => x.classList.toggle("active", x === b));
+    loadBoard();
+  }));
   // Подгрузка истории при прокрутке до конца списка
   new IntersectionObserver(([e]) => e.isIntersecting && loadHistory()).observe($("history-more"));
   loadHistory();

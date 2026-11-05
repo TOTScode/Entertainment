@@ -27,13 +27,14 @@ export function periodStart(period, ts) {
   return start / 1000 - MSK;
 }
 
-// Все пользователи с местом. Сортировка по успешности, а не по BIST (решение от 5.11):
-// 1) правильные ответы в викторинах, 2) доля угаданных исходов матчей (без точного счёта) — только при 6 и более
-// рассчитанных прогнозах на исход, 3) число угаданных исходов. При равенстве выше тот, кто зарегистрировался раньше.
-// Неделя и месяц считают только ответы и рассчитанные прогнозы за период.
+// Все пользователи с местом. Сортировка по успешности, а не по BIST (решение от 5.11).
+// По умолчанию (points) — по сумме очков: правильные ответы в викторинах + угаданные исходы матчей (без точного счёта).
+// accuracy — зеркально: по доле угаданных исходов (только при 6 и более рассчитанных прогнозах), при равенстве — по ответам в викторинах.
+// При равенстве выше тот, кто зарегистрировался раньше. Неделя и месяц считают только ответы и прогнозы за период.
+export const SORTS = { points: "quiz + won DESC, quiz DESC", accuracy: "COALESCE(accuracy, -1) DESC, quiz DESC, won DESC" };
 export const MIN_BETS = 6; // долю угаданных показываем, когда рассчитанных прогнозов на исход больше 5
 
-function rankedSql(since) {
+function rankedSql(since, sort = "points") {
   const quizFilter = since === null ? "" : "AND a.answered_at >= ?1";
   const predFilter = since === null ? "" : "AND p.settled_at >= ?1";
   return (
@@ -48,7 +49,7 @@ function rankedSql(since) {
     "  FROM users u LEFT JOIN quiz q ON q.user_id = u.id LEFT JOIN pred p ON p.user_id = u.id" +
     "), ranked AS (" +
     "  SELECT id, quiz, won, bets, accuracy, ROW_NUMBER() OVER (" +
-    "    ORDER BY quiz DESC, COALESCE(accuracy, -1) DESC, won DESC, created_at ASC, id ASC) AS rank FROM scores" +
+    `    ORDER BY ${SORTS[sort] || SORTS.points}, created_at ASC, id ASC) AS rank FROM scores` +
     ") "
   );
 }
@@ -72,16 +73,17 @@ function publicRow(row, previous) {
   };
 }
 
-export async function leaderboard(db, { period = "all", userId, limit = 100, ts = Math.floor(Date.now() / 1000) }) {
+export async function leaderboard(db, { period = "all", sort = "points", userId, limit = 100, ts = Math.floor(Date.now() / 1000) }) {
   if (!PERIODS.includes(period)) period = "all";
+  if (!SORTS[sort]) sort = "points";
   const since = periodStart(period, ts);
   const params = since === null ? [] : [since];
-  // Изменение места показываем только в общей таблице, сравнивая с последним снимком
+  // Изменение места показываем только в общей таблице с основной сортировкой, сравнивая с последним снимком
   const select =
-    period === "all"
-      ? `${rankedSql(since)}${rowFields}, s.rank AS previous FROM ranked r JOIN users u ON u.id = r.id ` +
+    period === "all" && sort === "points"
+      ? `${rankedSql(since, sort)}${rowFields}, s.rank AS previous FROM ranked r JOIN users u ON u.id = r.id ` +
         "LEFT JOIN rank_snapshots s ON s.user_id = r.id AND s.day = (SELECT MAX(day) FROM rank_snapshots) "
-      : `${rankedSql(since)}${rowFields}, NULL AS previous FROM ranked r JOIN users u ON u.id = r.id `;
+      : `${rankedSql(since, sort)}${rowFields}, NULL AS previous FROM ranked r JOIN users u ON u.id = r.id `;
 
   // Три запроса одним обращением к базе
   const [top, mine, total] = await db.batch([
@@ -92,6 +94,7 @@ export async function leaderboard(db, { period = "all", userId, limit = 100, ts 
   const me = mine.results[0];
   return {
     period,
+    sort,
     since,
     total: total.results[0].n,
     rows: top.results.map((r) => publicRow(r, r.previous)),

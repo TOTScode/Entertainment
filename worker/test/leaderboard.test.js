@@ -49,7 +49,7 @@ function predictions(db, userId, won, lost, at, market = "1x2") {
   }
 }
 
-test("общая таблица: викторины, затем доля угаданных исходов (от 6 прогнозов), при равенстве выше старший", async () => {
+test("общая таблица: по сумме очков, по тапу на ⚽️ — по доле угаданных (от 6 прогнозов)", async () => {
   const db = createDb();
   seed(db, [[1, NOW - 30 * DAY, "A"], [2, NOW - 20 * DAY, "B"], [3, NOW - 10 * DAY, "C"], [4, NOW - DAY, "D"], [5, NOW, "E"]]);
   tx(db, 4, 500, NOW - DAY); // BIST на место не влияют
@@ -62,11 +62,16 @@ test("общая таблица: викторины, затем доля уга�
   predictions(db, 5, 3, 0, NOW - DAY, "score"); // точный счёт не учитывается
   const board = await leaderboard(db, { userId: 4, ts: NOW });
   assert.equal(board.total, 5);
+  // Очки: E 0+5, A 1+3, B 1+2, C 2+0, D 0
   assert.deepEqual(
     board.rows.map((r) => [r.rank, r.id, r.quiz, r.accuracy, r.won, r.bets]),
-    [[1, 3, 2, null, 0, 0], [2, 1, 1, 50, 3, 6], [3, 2, 1, null, 2, 5], [4, 5, 0, 83, 5, 6], [5, 4, 0, null, 0, 0]],
+    [[1, 5, 0, 83, 5, 6], [2, 1, 1, 50, 3, 6], [3, 2, 1, null, 2, 5], [4, 3, 2, null, 0, 0], [5, 4, 0, null, 0, 0]],
   );
   assert.deepEqual([board.me.rank, board.me.name], [5, "D"]);
+
+  const byAcc = await leaderboard(db, { sort: "accuracy", userId: 4, ts: NOW });
+  assert.deepEqual(byAcc.rows.map((r) => r.id), [5, 1, 3, 2, 4]);
+  assert.ok(byAcc.rows.every((r) => r.change === null));
 });
 
 test("неделя и месяц: только ответы и рассчитанные прогнозы за период", async () => {

@@ -64,7 +64,7 @@ async function handleApi(request, env, path) {
 
   const params = new URL(request.url).searchParams;
   if (path === "/api/leaderboard" && request.method === "GET") {
-    return json(await leaderboard(env.DB, { period: params.get("period") || "all", userId: user.id }));
+    return json(await leaderboard(env.DB, { period: params.get("period") || "all", sort: params.get("sort") || "points", userId: user.id }));
   }
 
   // Публичный профиль другого участника: без истории операций
