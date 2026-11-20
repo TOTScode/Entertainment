@@ -351,33 +351,6 @@ function resetHistory() {
   loadHistory();
 }
 
-function openNickDialog() {
-  $("nick-input").value = me.nickname || "";
-  $("nick-input").placeholder = me.telegram_name;
-  $("nick-msg").classList.add("hidden");
-  $("nick-dialog").classList.remove("hidden");
-  $("nick-input").focus();
-}
-
-function closeNickDialog() {
-  $("nick-dialog").classList.add("hidden");
-}
-
-async function saveNickname() {
-  const btn = $("nick-save");
-  btn.disabled = true;
-  try {
-    me = { ...me, ...(await api("/api/nickname", { method: "POST", body: JSON.stringify({ nickname: $("nick-input").value }) })) };
-    renderProfile();
-    closeNickDialog();
-    tg?.HapticFeedback?.notificationOccurred("success");
-  } catch (e) {
-    showMsg($("nick-msg"), e.message, false);
-  } finally {
-    btn.disabled = false;
-  }
-}
-
 // --- админка ---
 
 async function adminSearch() {
@@ -1502,12 +1475,6 @@ async function init() {
     $("welcome").classList.remove("hidden");
     tg.HapticFeedback?.notificationOccurred("success");
   }
-  $("nick-edit").onclick = openNickDialog;
-  $("nick-close").onclick = closeNickDialog;
-  $("nick-save").onclick = saveNickname;
-  $("nick-input").addEventListener("keydown", (e) => e.key === "Enter" && saveNickname());
-  // Закрытие по тапу на затемнение вокруг окна
-  $("nick-dialog").addEventListener("click", (e) => e.target === e.currentTarget && closeNickDialog());
   $("user-close").onclick = () => $("user-dialog").classList.add("hidden");
   $("user-dialog").addEventListener("click", (e) => e.target === e.currentTarget && e.target.classList.add("hidden"));
   if (me.is_admin) {

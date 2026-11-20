@@ -75,17 +75,15 @@ test("баланс равен сумме транзакций и не уходи
   assert.equal((await call("/api/me", alexey)).data.balance, 0);
 });
 
-test("ник: проверка, уникальность без учёта регистра, сброс", async () => {
+test("ник нельзя изменить или сбросить прямым запросом", async () => {
   await call("/api/me", alexey);
-  await call("/api/me", { id: 8, first_name: "Иван" });
-  assert.equal((await call("/api/nickname", alexey, { method: "POST", body: { nickname: "ab" } })).status, 400);
-  assert.equal((await call("/api/nickname", alexey, { method: "POST", body: { nickname: "<script>" } })).status, 400);
-  const ok = await call("/api/nickname", alexey, { method: "POST", body: { nickname: "  Гол  Мастер " } });
-  assert.equal(ok.data.name, "Гол Мастер");
-  const taken = await call("/api/nickname", { id: 8 }, { method: "POST", body: { nickname: "гол мастер" } });
-  assert.equal(taken.status, 409);
-  const reset = await call("/api/nickname", alexey, { method: "POST", body: { nickname: "" } });
-  assert.equal(reset.data.name, "Алексей");
+  env.DB.raw.prepare("UPDATE users SET nickname = 'Гол Мастер', nickname_key = 'гол мастер' WHERE id = 7").run();
+  for (const nickname of ["Другой ник", ""]) {
+    const result = await call("/api/nickname", alexey, { method: "POST", body: { nickname } });
+    assert.equal(result.status, 403);
+    assert.equal(result.data.error, "Изменение ника недоступно");
+    assert.equal((await call("/api/me", alexey)).data.name, "Гол Мастер");
+  }
 });
 
 test("админка: доступ только из ADMIN_IDS, корректировка пишется в журнал и аудит", async () => {

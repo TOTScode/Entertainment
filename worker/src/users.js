@@ -6,10 +6,6 @@ import { UNIT } from "./money.js";
 
 const now = () => Math.floor(Date.now() / 1000);
 
-export const NICKNAME_MIN = 3;
-export const NICKNAME_MAX = 24;
-const NICKNAME_RE = /^[\p{L}\p{N} _.-]+$/u;
-
 export class LedgerError extends Error {}
 
 export function telegramName(user) {
@@ -93,28 +89,6 @@ export async function getUser(db, userId) {
   const user = await db.prepare("SELECT * FROM users WHERE id = ?").bind(userId).first();
   if (!user) return null;
   return { ...user, balance: await getBalance(db, userId) };
-}
-
-// Проверка и сохранение ника. Пустая строка сбрасывает ник на имя из Telegram.
-export function validateNickname(raw) {
-  const nickname = String(raw ?? "").trim().replace(/\s+/g, " ");
-  if (!nickname) return { nickname: null };
-  if (nickname.length < NICKNAME_MIN || nickname.length > NICKNAME_MAX) {
-    return { error: `Ник должен быть от ${NICKNAME_MIN} до ${NICKNAME_MAX} символов` };
-  }
-  if (!NICKNAME_RE.test(nickname)) return { error: "Можно использовать буквы, цифры, пробел, точку, дефис и _" };
-  return { nickname };
-}
-
-export async function setNickname(db, userId, nickname) {
-  const key = nickname ? nickname.toLowerCase() : null;
-  try {
-    await db.prepare("UPDATE users SET nickname = ?, nickname_key = ? WHERE id = ?").bind(nickname, key, userId).run();
-  } catch (e) {
-    if (String(e.message).includes("UNIQUE")) return false;
-    throw e;
-  }
-  return true;
 }
 
 export async function searchUsers(db, query, limit = 20) {

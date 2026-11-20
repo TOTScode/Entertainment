@@ -13,7 +13,7 @@ import { sync } from "./sync.js";
 import { checkAlerts } from "./alerts.js";
 import { answerQuestion, openQuestion, pastQuiz, QuizError, quizState, serveMedia } from "./quizzes.js";
 import { history, leaderboard, publicProfile, takeSnapshot } from "./leaderboard.js";
-import { displayName, getUser, registerOrUpdate, setNickname, telegramName, validateNickname, yearsSince } from "./users.js";
+import { displayName, registerOrUpdate, telegramName, yearsSince } from "./users.js";
 
 export { validateInitData, webhookSecret } from "./auth.js";
 
@@ -51,11 +51,7 @@ async function handleApi(request, env, path) {
   const user = { id: tgUser.id };
 
   if (path === "/api/nickname" && request.method === "POST") {
-    const body = await request.json().catch(() => ({}));
-    const { nickname, error } = validateNickname(body.nickname);
-    if (error) return json({ error }, 400);
-    if (!(await setNickname(env.DB, user.id, nickname))) return json({ error: "Этот ник уже занят" }, 409);
-    return json(profile(await getUser(env.DB, user.id), env, false));
+    return json({ error: "Изменение ника недоступно" }, 403);
   }
 
   if (path.startsWith("/api/admin/")) {
