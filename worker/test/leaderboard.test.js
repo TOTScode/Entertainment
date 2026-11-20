@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { history, leaderboard, moscowDay, periodStart, takeSnapshot, userStats } from "../src/leaderboard.js";
+import { history, leaderboard, moscowDay, periodStart, publicProfile, takeSnapshot, userStats } from "../src/leaderboard.js";
 import { addTransaction } from "../src/users.js";
 import { UNIT } from "../src/money.js";
 import { createDb } from "./fake-d1.js";
@@ -49,7 +49,7 @@ function predictions(db, userId, won, lost, at, market = "1x2") {
   }
 }
 
-test("общая таблица: по сумме очков, по тапу на ⚽️ — по доле угаданных (от 6 прогнозов)", async () => {
+test("общая таблица: только доля исходов, очки и старый параметр сортировки не влияют", async () => {
   const db = createDb();
   seed(db, [[1, NOW - 30 * DAY, "A"], [2, NOW - 20 * DAY, "B"], [3, NOW - 10 * DAY, "C"], [4, NOW - DAY, "D"], [5, NOW, "E"]]);
   tx(db, 4, 500, NOW - DAY); // BIST на место не влияют
@@ -62,16 +62,29 @@ test("общая таблица: по сумме очков, по тапу на 
   predictions(db, 5, 3, 0, NOW - DAY, "score"); // точный счёт не учитывается
   const board = await leaderboard(db, { userId: 4, ts: NOW });
   assert.equal(board.total, 5);
-  // Очки: E 0+5, A 1+3, B 1+2, C 2+0, D 0
+  // E и A имеют долю; остальные ниже. Викторины и BIST место не меняют.
   assert.deepEqual(
     board.rows.map((r) => [r.rank, r.id, r.quiz, r.accuracy, r.won, r.bets]),
     [[1, 5, 0, 83, 5, 6], [2, 1, 1, 50, 3, 6], [3, 2, 1, null, 2, 5], [4, 3, 2, null, 0, 0], [5, 4, 0, null, 0, 0]],
   );
   assert.deepEqual([board.me.rank, board.me.name], [5, "D"]);
 
-  const byAcc = await leaderboard(db, { sort: "accuracy", userId: 4, ts: NOW });
-  assert.deepEqual(byAcc.rows.map((r) => r.id), [5, 1, 3, 2, 4]);
-  assert.ok(byAcc.rows.every((r) => r.change === null));
+  const legacy = await leaderboard(db, { sort: "points", userId: 4, ts: NOW });
+  assert.equal(legacy.sort, "accuracy");
+  assert.deepEqual(legacy.rows.map((r) => r.id), [5, 1, 2, 3, 4]);
+  quizRight(db, 4, 20, NOW);
+  assert.deepEqual((await leaderboard(db, { userId: 4, ts: NOW })).rows.map(r => r.id), [5, 1, 2, 3, 4]);
+});
+
+test("равная доля: число угаданных, затем регистрация; профиль совпадает с таблицей", async () => {
+  const db = createDb();
+  seed(db, [[1, NOW - 30 * DAY, "A"], [2, NOW - 20 * DAY, "B"], [3, NOW - 10 * DAY, "C"]]);
+  predictions(db, 1, 3, 3, NOW - DAY);
+  predictions(db, 2, 4, 4, NOW - DAY);
+  predictions(db, 3, 3, 3, NOW - DAY);
+  quizRight(db, 3, 20, NOW - DAY);
+  assert.deepEqual((await leaderboard(db, { userId: 1, ts: NOW })).rows.map(r => r.id), [2, 1, 3]);
+  assert.equal((await publicProfile(db, 1)).rank, 2);
 });
 
 test("неделя и месяц: только ответы и рассчитанные прогнозы за период", async () => {
@@ -80,6 +93,8 @@ test("неделя и месяц: только ответы и рассчита�
   quizRight(db, 1, 5, Date.UTC(2026, 8, 20) / 1000); // сентябрь
   quizRight(db, 1, 1, Date.UTC(2026, 9, 26, 6) / 1000); // эта неделя
   quizRight(db, 2, 3, Date.UTC(2026, 9, 10) / 1000); // этот месяц, прошлая неделя
+  predictions(db, 1, 4, 2, Date.UTC(2026, 9, 26, 6) / 1000); // 67% на неделе
+  predictions(db, 2, 6, 0, Date.UTC(2026, 9, 10) / 1000); // 100% в месяце
 
   const week = await leaderboard(db, { period: "week", userId: 3, ts: NOW });
   assert.deepEqual(week.rows.map((r) => [r.id, r.quiz]), [[1, 1], [2, 0], [3, 0]]);
@@ -92,7 +107,7 @@ test("неделя и месяц: только ответы и рассчита�
 
   const all = await leaderboard(db, { period: "nonsense", userId: 3, ts: NOW });
   assert.equal(all.period, "all");
-  assert.deepEqual(all.rows.map((r) => [r.id, r.quiz]), [[1, 6], [2, 3], [3, 0]]);
+  assert.deepEqual(all.rows.map((r) => [r.id, r.quiz]), [[2, 3], [1, 6], [3, 0]]);
 });
 
 test("снимок рейтинга: изменение места за сутки, повторный снимок не меняет день", async () => {
@@ -101,7 +116,7 @@ test("снимок рейтинга: изменение места за сутк
   assert.equal((await leaderboard(db, { userId: 2, ts: NOW })).me.change, null);
 
   assert.equal(await takeSnapshot(db, NOW - DAY), "2026-10-27");
-  quizRight(db, 2, 1, NOW);
+  predictions(db, 2, 6, 0, NOW);
   assert.equal(await takeSnapshot(db, NOW - DAY), "2026-10-27"); // повтор не перезаписывает
   const board = await leaderboard(db, { userId: 2, ts: NOW });
   assert.deepEqual(board.rows.map((r) => [r.id, r.change]), [[2, 1], [1, -1]]);
