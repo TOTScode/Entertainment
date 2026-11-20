@@ -27,10 +27,13 @@ export function periodStart(period, ts) {
   return start / 1000 - MSK;
 }
 
-// Места только по доле угаданных исходов (от 6 рассчитанных прогнозов).
-// При равенстве — число угаданных исходов, затем дата регистрации и ID.
+// Места только по сглаженной доле: (угадано + 3) / (рассчитано + 6).
+// 6 виртуальных прогнозов с долей 50% уменьшают эффект малой выборки.
+// При равной оценке — дата регистрации и ID, без дополнительной сортировки по числу побед.
 // Ответы викторин остаются статистикой и не влияют на место.
-const RANK_ORDER = "COALESCE(accuracy, -1) DESC, won DESC";
+const RANK_ORDER = "COALESCE(rating, -1) DESC";
+export const RATING_PRIOR_WINS = 3;
+export const RATING_PRIOR_BETS = 6;
 export const MIN_BETS = 6; // долю угаданных показываем, когда рассчитанных прогнозов на исход больше 5
 
 function rankedSql(since) {
@@ -44,17 +47,18 @@ function rankedSql(since) {
     `  WHERE p.market = '1x2' AND p.status IN ('won', 'lost') ${predFilter} GROUP BY p.user_id` +
     "), scores AS (" +
     "  SELECT u.id, u.created_at, COALESCE(q.n, 0) AS quiz, COALESCE(p.won, 0) AS won, COALESCE(p.bets, 0) AS bets, " +
-    `  CASE WHEN p.bets >= ${MIN_BETS} THEN CAST(p.won AS REAL) / p.bets END AS accuracy ` +
+    `  CASE WHEN p.bets >= ${MIN_BETS} THEN CAST(p.won AS REAL) / p.bets END AS accuracy, ` +
+    `  CASE WHEN p.bets >= ${MIN_BETS} THEN CAST(p.won + ${RATING_PRIOR_WINS} AS REAL) / (p.bets + ${RATING_PRIOR_BETS}) END AS rating ` +
     "  FROM users u LEFT JOIN quiz q ON q.user_id = u.id LEFT JOIN pred p ON p.user_id = u.id" +
     "), ranked AS (" +
-    "  SELECT id, quiz, won, bets, accuracy, ROW_NUMBER() OVER (" +
+    "  SELECT id, quiz, won, bets, accuracy, rating, ROW_NUMBER() OVER (" +
     `    ORDER BY ${RANK_ORDER}, created_at ASC, id ASC) AS rank FROM scores` +
     ") "
   );
 }
 
 const rowFields =
-  "SELECT r.rank, r.quiz, r.won, r.bets, r.accuracy, u.id, u.username, u.first_name, u.last_name, u.nickname, u.photo_url";
+  "SELECT r.rank, r.quiz, r.won, r.bets, r.accuracy, r.rating, u.id, u.username, u.first_name, u.last_name, u.nickname, u.photo_url";
 
 function publicRow(row, previous) {
   return {
@@ -67,6 +71,7 @@ function publicRow(row, previous) {
     bets: row.bets,
     // Доля угаданных исходов в процентах; null, пока рассчитанных прогнозов на исход меньше 6
     accuracy: row.accuracy == null ? null : Math.round(row.accuracy * 100),
+    rating: row.rating == null ? null : Math.round(row.rating * 1000) / 10,
     // Положительное число — поднялся на столько мест, отрицательное — опустился
     change: previous == null ? null : previous - row.rank,
   };
@@ -92,7 +97,7 @@ export async function leaderboard(db, { period = "all", userId, limit = 100, ts 
   const me = mine.results[0];
   return {
     period,
-    sort: "accuracy",
+    sort: "weighted_accuracy",
     since,
     total: total.results[0].n,
     rows: top.results.map((r) => publicRow(r, r.previous)),
@@ -105,7 +110,7 @@ export async function publicProfile(db, userId) {
   const row = await db
     .prepare(
       `${rankedSql(null)}SELECT u.id, u.username, u.first_name, u.last_name, u.nickname, u.photo_url, u.created_at, ` +
-      "(SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE user_id = u.id) AS balance, r.rank, r.quiz, r.won, r.bets, r.accuracy, " +
+      "(SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE user_id = u.id) AS balance, r.rank, r.quiz, r.won, r.bets, r.accuracy, r.rating, " +
       "(SELECT COALESCE(SUM(CASE WHEN amount > 0 THEN amount END), 0) FROM transactions WHERE user_id = u.id) AS earned, " +
       "(SELECT COALESCE(-SUM(CASE WHEN amount < 0 THEN amount END), 0) FROM transactions WHERE user_id = u.id) AS spent " +
       "FROM users u JOIN ranked r ON r.id = u.id WHERE u.id = ?1",
@@ -125,6 +130,7 @@ export async function publicProfile(db, userId) {
     won: row.won,
     bets: row.bets,
     accuracy: row.accuracy == null ? null : Math.round(row.accuracy * 100),
+    rating: row.rating == null ? null : Math.round(row.rating * 1000) / 10,
     stats: { earned: toBist(row.earned), spent: toBist(row.spent) },
   };
 }

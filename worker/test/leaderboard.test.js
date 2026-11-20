@@ -70,21 +70,44 @@ test("общая таблица: только доля исходов, очки 
   assert.deepEqual([board.me.rank, board.me.name], [5, "D"]);
 
   const legacy = await leaderboard(db, { sort: "points", userId: 4, ts: NOW });
-  assert.equal(legacy.sort, "accuracy");
+  assert.equal(legacy.sort, "weighted_accuracy");
   assert.deepEqual(legacy.rows.map((r) => r.id), [5, 1, 2, 3, 4]);
   quizRight(db, 4, 20, NOW);
   assert.deepEqual((await leaderboard(db, { userId: 4, ts: NOW })).rows.map(r => r.id), [5, 1, 2, 3, 4]);
 });
 
-test("равная доля: число угаданных, затем регистрация; профиль совпадает с таблицей", async () => {
+test("равная взвешенная оценка: только регистрация; профиль совпадает с таблицей", async () => {
   const db = createDb();
   seed(db, [[1, NOW - 30 * DAY, "A"], [2, NOW - 20 * DAY, "B"], [3, NOW - 10 * DAY, "C"]]);
   predictions(db, 1, 3, 3, NOW - DAY);
   predictions(db, 2, 4, 4, NOW - DAY);
   predictions(db, 3, 3, 3, NOW - DAY);
   quizRight(db, 3, 20, NOW - DAY);
-  assert.deepEqual((await leaderboard(db, { userId: 1, ts: NOW })).rows.map(r => r.id), [2, 1, 3]);
-  assert.equal((await publicProfile(db, 1)).rank, 2);
+  assert.deepEqual((await leaderboard(db, { userId: 1, ts: NOW })).rows.map(r => r.id), [1, 2, 3]);
+  assert.equal((await publicProfile(db, 1)).rank, 1);
+  assert.equal((await publicProfile(db, 1)).rating, 50);
+});
+
+test("оценка учитывает размер выборки и не учитывает точный счёт", async () => {
+  const db = createDb();
+  seed(db, [[1, NOW - 30 * DAY, "A"], [2, NOW - 20 * DAY, "B"], [3, NOW - 10 * DAY, "C"], [4, NOW - DAY, "D"]]);
+  predictions(db, 1, 6, 0, NOW - DAY); // 100%, оценка 75
+  predictions(db, 2, 80, 20, NOW - DAY); // 80%, оценка 78.3 — выше малой выборки
+  predictions(db, 3, 5, 0, NOW - DAY); // меньше порога
+  predictions(db, 3, 50, 0, NOW - DAY, "score");
+  predictions(db, 4, 81, 20, NOW - DAY); // оценка 78.5
+  const board = await leaderboard(db, { userId: 1, ts: NOW });
+  assert.deepEqual(board.rows.map(r => [r.id, r.rating]), [[4, 78.5], [2, 78.3], [1, 75], [3, null]]);
+  assert.equal((await publicProfile(db, 2)).rank, 2);
+});
+
+test("сортировка использует точную оценку, а не округлённое значение из API", async () => {
+  const db = createDb();
+  seed(db, [[1, NOW - 30 * DAY, "A"], [2, NOW - 20 * DAY, "B"]]);
+  predictions(db, 1, 501, 500, NOW - DAY);
+  predictions(db, 2, 500, 499, NOW - DAY);
+  const board = await leaderboard(db, { userId: 1, ts: NOW });
+  assert.deepEqual(board.rows.map(r => [r.id, r.rating]), [[2, 50], [1, 50]]);
 });
 
 test("неделя и месяц: только ответы и рассчитанные прогнозы за период", async () => {

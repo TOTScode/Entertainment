@@ -2,7 +2,7 @@
 const flows = {
   quizzes: {title:'Пройти викторину',steps:['Увидеть текущую игру и правила','Открыть вопрос — здесь начинается таймер','Отправить один ответ','Увидеть результат и прогресс'],exception:'Границы: время вышло → ответ закрыт; ошибка сети → повтор с защитой от двойной награды. В макете таймер не запускается.'},
   predictions: {title:'Сделать прогноз',steps:['Выбрать матч и исход','Указать сумму и проверить выплату','Подтвердить прогноз','Найти его в «Моих прогнозах»'],exception:'Границы: мало BIST, матч начался или вес устарел → причина запрета. Замена/отмена → возврат и кулдаун.'},
-  table: {title:'Понять своё место',steps:['Увидеть рейтинг и названия показателей','Сравнить долю угаданных исходов','Найти свою строку и своё место','Перейти в профиль и историю'],exception:'Границы: меньше 6 исходов → «—» с пояснением; игрок вне первой сотни → отдельный блок своего места.'},
+  table: {title:'Понять своё место',steps:['Увидеть рейтинг и названия показателей','Сравнить взвешенную оценку','Найти свою строку и своё место','Перейти в профиль и историю'],exception:'Границы: меньше 6 исходов → «—» с пояснением; игрок вне первой сотни → отдельный блок своего места.'},
   profile: {title:'Проверить баланс',steps:['Узнать себя по имени','Увидеть баланс и состав изменений','Просмотреть историю операций'],exception:'Имя и ник доступны только для просмотра. Административные функции отделены от личных.'}
 };
 let activeScreen='quizzes';
@@ -22,7 +22,7 @@ const schedule=$('archive').previousElementSibling;schedule.className='info-bloc
 const archiveBlock=document.createElement('div');archiveBlock.className='list-block';$('archive').before(archiveBlock);archiveBlock.innerHTML='<h3>Прошлые игры</h3>';archiveBlock.append($('archive'),$('archive-result'));labelBlock(archiveBlock,'Блок 3 · архив');
 const predictionsRule=document.querySelector('#matches > p');predictionsRule.className='info-block';predictionsRule.prepend(Object.assign(document.createElement('div'),{className:'section-caption',textContent:'До подтверждения'}));
 const table=document.querySelector('.board');const tableBlock=document.createElement('div');tableBlock.className='list-block';table.before(tableBlock);tableBlock.append(table);labelBlock(tableBlock,'Блок 1 · список участников');
-const own=document.createElement('div');own.className='card qualify-card';own.innerHTML='<div class="section-caption">Ваше место</div><div class="row"><b id="own-rank">2 · Твой ник</b><span>80% исходов</span></div>';tableBlock.after(own);board();document.querySelector('[data-screen="table"] > p:last-child').className='info-block';
+const own=document.createElement('div');own.className='card qualify-card';own.innerHTML='<div class="section-caption">Ваше место</div><div class="row"><b id="own-rank">2 · Твой ник</b><span>68.8 балла</span></div>';tableBlock.after(own);board();document.querySelector('[data-screen="table"] > p:last-child').className='info-block';
 
 const profile=document.querySelector('[data-screen="profile"]');profile.querySelector('.row').classList.add('profile-identity');profile.querySelector('.card').classList.add('wallet-card');labelBlock(profile.querySelector('.card'),'Блок 2 · баланс');
 const historyHeading=profile.querySelector('h3');const historyBlock=document.createElement('div');historyBlock.className='list-block';historyHeading.before(historyBlock);historyBlock.append(historyHeading,...profile.querySelectorAll('.history'));labelBlock(historyBlock,'Блок 3 · история');
