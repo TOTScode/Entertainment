@@ -145,7 +145,7 @@ function boardRow(r) {
   const acc = document.createElement("span");
   acc.className = "acc";
   acc.textContent = r.rating == null ? "—" : r.rating.toFixed(1);
-  acc.title = r.bets ? `Угадано ${r.won} из ${r.bets}. Оценка = число правильных × доля правильных, от 6 прогнозов` : "Нет рассчитанных прогнозов на исход";
+  acc.title = r.bets ? `Правильных: ${r.won}, всех попыток: ${r.bets}. Оценка = правильные² / все попытки, от 6 завершённых прогнозов` : "Нет завершённых прогнозов на исход";
   const chg = document.createElement("span");
   chg.className = "chg";
   if (r.change > 0) { chg.textContent = `▲${r.change}`; chg.classList.add("plus"); }
