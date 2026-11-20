@@ -138,14 +138,14 @@ function boardRow(r) {
   const who = document.createElement("span");
   who.className = "who";
   who.textContent = r.name;
-  // Две колонки: ответы викторин и сглаженная оценка исходов (от 6 прогнозов).
+  // Две колонки: ответы викторин и оценка «правильные × доля» (от 6 прогнозов).
   const score = document.createElement("span");
   score.className = "score";
   score.textContent = r.quiz;
   const acc = document.createElement("span");
   acc.className = "acc";
   acc.textContent = r.rating == null ? "—" : r.rating.toFixed(1);
-  acc.title = r.bets ? `Угадано ${r.won} из ${r.bets}. Оценка = (угадано + 3) / (рассчитано + 6) × 100, от 6 прогнозов` : "Нет рассчитанных прогнозов на исход";
+  acc.title = r.bets ? `Угадано ${r.won} из ${r.bets}. Оценка = число правильных × доля правильных, от 6 прогнозов` : "Нет рассчитанных прогнозов на исход";
   const chg = document.createElement("span");
   chg.className = "chg";
   if (r.change > 0) { chg.textContent = `▲${r.change}`; chg.classList.add("plus"); }

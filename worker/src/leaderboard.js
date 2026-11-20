@@ -27,13 +27,11 @@ export function periodStart(period, ts) {
   return start / 1000 - MSK;
 }
 
-// Места только по сглаженной доле: (угадано + 3) / (рассчитано + 6).
-// 6 виртуальных прогнозов с долей 50% уменьшают эффект малой выборки.
+// Оценка = число правильных исходов × их доля = won × won / bets.
+// Количество рассчитанных прогнозов используется только для вычисления доли и порога допуска.
 // При равной оценке — дата регистрации и ID, без дополнительной сортировки по числу побед.
 // Ответы викторин остаются статистикой и не влияют на место.
 const RANK_ORDER = "COALESCE(rating, -1) DESC";
-export const RATING_PRIOR_WINS = 3;
-export const RATING_PRIOR_BETS = 6;
 export const MIN_BETS = 6; // долю угаданных показываем, когда рассчитанных прогнозов на исход больше 5
 
 function rankedSql(since) {
@@ -48,7 +46,7 @@ function rankedSql(since) {
     "), scores AS (" +
     "  SELECT u.id, u.created_at, COALESCE(q.n, 0) AS quiz, COALESCE(p.won, 0) AS won, COALESCE(p.bets, 0) AS bets, " +
     `  CASE WHEN p.bets >= ${MIN_BETS} THEN CAST(p.won AS REAL) / p.bets END AS accuracy, ` +
-    `  CASE WHEN p.bets >= ${MIN_BETS} THEN CAST(p.won + ${RATING_PRIOR_WINS} AS REAL) / (p.bets + ${RATING_PRIOR_BETS}) END AS rating ` +
+    `  CASE WHEN p.bets >= ${MIN_BETS} THEN CAST(p.won AS REAL) * p.won / p.bets END AS rating ` +
     "  FROM users u LEFT JOIN quiz q ON q.user_id = u.id LEFT JOIN pred p ON p.user_id = u.id" +
     "), ranked AS (" +
     "  SELECT id, quiz, won, bets, accuracy, rating, ROW_NUMBER() OVER (" +
@@ -71,7 +69,7 @@ function publicRow(row, previous) {
     bets: row.bets,
     // Доля угаданных исходов в процентах; null, пока рассчитанных прогнозов на исход меньше 6
     accuracy: row.accuracy == null ? null : Math.round(row.accuracy * 100),
-    rating: row.rating == null ? null : Math.round(row.rating * 1000) / 10,
+    rating: row.rating == null ? null : Math.round(row.rating * 10) / 10,
     // Положительное число — поднялся на столько мест, отрицательное — опустился
     change: previous == null ? null : previous - row.rank,
   };
@@ -130,7 +128,7 @@ export async function publicProfile(db, userId) {
     won: row.won,
     bets: row.bets,
     accuracy: row.accuracy == null ? null : Math.round(row.accuracy * 100),
-    rating: row.rating == null ? null : Math.round(row.rating * 1000) / 10,
+    rating: row.rating == null ? null : Math.round(row.rating * 10) / 10,
     stats: { earned: toBist(row.earned), spent: toBist(row.spent) },
   };
 }
