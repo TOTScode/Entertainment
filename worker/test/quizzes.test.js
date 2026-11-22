@@ -27,8 +27,8 @@ const make = (title, at = NOW, extra = {}) =>
     title,
     reward: 2,
     questions: [
-      { text: "Кто забил в финале ЛЧ 2005?", answers: "Джеррард\nСтивен Джеррард\nGerrard" },
-      { text: "Год основания «Спартака»?", answers: ["1922"] },
+      { source: "test: verified fixture", text: "Кто забил в финале ЛЧ 2005?", answers: "Джеррард\nСтивен Джеррард\nGerrard" },
+      { source: "test: verified fixture", text: "Год основания «Спартака»?", answers: ["1922"] },
     ],
     ...extra,
   }, at);
@@ -67,7 +67,7 @@ test("очередь: первая начинается сразу, следую
   await moveQuiz(db, c, "up", NOW + 60);
   assert.equal(quiz(c).starts_at, MIDNIGHT);
   await deleteQuiz(db, c, NOW + 60);
-  assert.equal(quiz(c), undefined);
+  assert.equal(quiz(c).ends_at, NOW + 60); // queued removal retains history
   assert.equal(quiz(b).starts_at, MIDNIGHT);
 
   // Снять текущую: следующая начинается сразу
@@ -92,10 +92,10 @@ test("прохождение: правильные ответы скрыты, н
   const q1 = qid(id, 1);
   const opened = await openQuestion(db, 1, q1, NOW);
   assert.equal(opened.question.text, "Кто забил в финале ЛЧ 2005?");
-  assert.equal(opened.question.deadline, NOW + 60);
+  assert.equal(opened.question.deadline, NOW + 20);
   assert.equal(opened.question.answers, undefined);
   // Повторное открытие не сбрасывает время
-  assert.equal((await openQuestion(db, 1, q1, NOW + 30)).question.deadline, NOW + 60);
+  assert.equal((await openQuestion(db, 1, q1, NOW + 10)).question.deadline, NOW + 20);
 
   const res = await answerQuestion(db, 1, q1, "стивен ДЖЕРРАРД", NOW + 20);
   assert.equal(res.correct, true);
@@ -112,7 +112,7 @@ test("прохождение: правильные ответы скрыты, н
 
   // Время вышло
   await openQuestion(db, 2, q1, NOW);
-  await assert.rejects(answerQuestion(db, 2, q1, "Gerrard", NOW + 66), /Время/);
+  await assert.rejects(answerQuestion(db, 2, q1, "Gerrard", NOW + 26), /Время/);
   assert.equal(balance(2), 10);
 
   // Правильные варианты видны после окончания викторины
@@ -133,13 +133,10 @@ test("несколько попыток без таймера; правка ви
   assert.equal((await answerQuestion(db, 1, q, "Лэмпард", NOW + 5000)).question.attempts_left, 1);
   assert.equal((await answerQuestion(db, 1, q, "Gerrard", NOW + 6000)).correct, true);
 
-  // Правка: первый вопрос остаётся, второй заменяется новым
-  await updateQuiz(db, id, { title: "Вторая", reward: 1, questions: [{ id: q, text: "Новый текст", answers: "Джеррард" }, { text: "Ещё", answers: "да" }] }, NOW + 7000);
-  const rows = db.raw.prepare("SELECT id, text FROM quiz_questions WHERE quiz_id = ? ORDER BY position").all(id);
-  assert.equal(rows[0].id, q);
-  assert.deepEqual(rows.map((r) => r.text), ["Новый текст", "Ещё"]);
-  await assert.rejects(updateQuiz(db, id, { title: "", questions: [] }, NOW), /название/);
-  await assert.rejects(createQuiz(db, 1, { title: "X", questions: [{ text: "Вопрос", answers: "" }] }, NOW), /правильный ответ/);
+  // An already-started task cannot be rewritten and erase historical answers.
+  await assert.rejects(updateQuiz(db,id,{title:"New",reward:1,questions:[{source:'test',id:q,text:'New',answers:'yes'}]},NOW+7000),/Начатую/);
+  assert.equal(db.raw.prepare('SELECT COUNT(*) AS n FROM quiz_answers WHERE question_id=?').get(q).n,1);
+  await assert.rejects(createQuiz(db,1,{title:'X',questions:[{text:'?',answers:'yes'}]},NOW),/источник/);
 
   const { history } = await import("../src/leaderboard.js");
   const h = await history(db, 1);

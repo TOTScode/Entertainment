@@ -62,23 +62,43 @@ jobs:
           echo "Restore point (UTC): $(date -u +%Y-%m-%dT%H:%M:%SZ)" | tee -a "$GITHUB_STEP_SUMMARY"
           npx -y wrangler@4 d1 time-travel info tots
 
+      - name: Pause writes for database update
+        if: steps.secrets.outputs.ready == 'true'
+        run: |
+          cat > worker/release-maintenance.js <<'JS'
+          export default {
+            fetch() { return new Response('Обновление приложения. Попробуйте через несколько минут.', {status:503,headers:{'Content-Type':'text/plain; charset=utf-8','Retry-After':'120','Cache-Control':'no-store'}}); },
+            scheduled() {}
+          };
+          JS
+          cp -r webapp dist
+          npx -y wrangler@4 deploy worker/release-maintenance.js --var "ADMIN_IDS:${ADMIN_IDS:-}"
+
+      - name: Backup and rehearse migrations
+        if: steps.secrets.outputs.ready == 'true'
+        run: |
+          umask 077
+          mkdir -p "$RUNNER_TEMP/tots-release"
+          npx -y wrangler@4 d1 export tots --remote --output="$RUNNER_TEMP/tots-release/before.sql"
+          npx -y wrangler@4 d1 execute tots --remote --command='SELECT name FROM d1_migrations' --json > "$RUNNER_TEMP/tots-release/applied.json"
+          python3 scripts/check-release-data.py rehearse "$RUNNER_TEMP/tots-release/before.sql" "$RUNNER_TEMP/tots-release/applied.json"
+
       - name: Apply migrations
         if: steps.secrets.outputs.ready == 'true'
         run: npx -y wrangler@4 d1 migrations apply tots --remote
 
-      - name: Remove old preview copy
+      - name: Verify preserved history
         if: steps.secrets.outputs.ready == 'true'
         run: |
-          # Тестовая копия больше не используется. Шаг ничего не делает, если её уже нет.
-          w="npx -y wrangler@4"
-          $w delete --name tots-preview --force || true
-          if $w d1 list --json | jq -e '.[] | select(.name == "tots-preview")' >/dev/null; then
-            $w d1 delete tots-preview -y
-          fi
+          umask 077
+          npx -y wrangler@4 d1 export tots --remote --output="$RUNNER_TEMP/tots-release/after.sql"
+          python3 scripts/check-release-data.py compare "$RUNNER_TEMP/tots-release/before.sql" "$RUNNER_TEMP/tots-release/after.sql"
 
       - name: Build frontend
         if: steps.secrets.outputs.ready == 'true'
-        run: cp -r webapp dist
+        run: |
+          rm -rf dist
+          cp -r webapp dist
 
       - name: Deploy worker
         id: deploy
@@ -120,3 +140,7 @@ jobs:
           # Кнопка меню рядом с полем ввода, открывающая мини-приложение
           jq -nc --arg url "$APP_URL/" '{menu_button: {type: "web_app", text: "TOTS", web_app: {url: $url}}}' \
             | curl -sS "$api/setChatMenuButton" -H 'Content-Type: application/json' -d @- | jq -c '{ok, description}'
+
+      - name: Clean private release snapshots
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/tots-release"

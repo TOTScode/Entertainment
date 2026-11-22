@@ -124,6 +124,7 @@ async function syncResults(env, op, budget, now, log) {
 }
 
 async function applyResult(db, m, r, now, log) {
+  if(r.status==='finished'||r.status==='cancelled')await db.prepare('INSERT INTO content_versions(kind,target_id,source,snapshot,created_at) VALUES(?,?,?,?,?)').bind('provider_result',m.id,r.fd_id?'football-data.org /matches id:'+r.fd_id:'OddsPapi fixture:'+r.op_id,JSON.stringify(r),now).run();
   if (r.status === "finished" && r.score) {
     await settleMatch(db, m, r.score, now);
     log.push(`рассчитан ${m.home} — ${m.away} ${r.score.join(":")}`);

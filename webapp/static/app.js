@@ -18,7 +18,6 @@ const $ = (id) => document.getElementById(id);
 const TABS = ["quizzes", "predictions", "table", "profile"];
 let me = null;
 let adminTarget = null;
-let boardPeriod = "all";
 let historyNext = undefined; // undefined — ещё не грузили, null — больше нет
 let historyLoading = false;
 let clockSkew = 0;
@@ -28,6 +27,8 @@ const TX_LABELS = {
   signup_bonus: "Бонус за регистрацию",
   admin_adjustment: "Корректировка администратора",
   quiz_reward: "Награда за викторину",
+  quiz_reward_reversal: "Сторно награды за отменённый вопрос",
+  season_opening: "Обновление баланса сезона",
   bet: "Прогноз",
   payout: "Выигрыш по прогнозу",
   refund: "Возврат",
@@ -180,71 +181,78 @@ function avatarEl(user, extra = "") {
 // --- таблица ---
 
 function boardRow(r) {
-  const li = document.createElement("li");
-  li.className = `brow${r.id === me.id ? " me" : ""}`;
-  const rank = document.createElement("span");
-  rank.className = `rank${r.rank <= 3 ? " top" : ""}`;
-  rank.textContent = ["🥇", "🥈", "🥉"][r.rank - 1] || r.rank;
+  const tr = document.createElement("tr");
+  tr.className = r.id === me.id ? "me" : "";
+  const place = document.createElement("td");
+  place.className = "place-cell";
+  place.textContent = r.rank ?? "—";
+  if(r.rank>=1 && r.rank<=3)place.classList.add("leading");
+  const name = document.createElement("th");
+  name.scope = "row";
+  name.className = "name-cell";
   const who = document.createElement("button");
-  who.className = "who";
-  who.textContent = r.name;
-  // Две колонки: ответы викторин и оценка «правильные × доля» (от 6 прогнозов).
-  const score = document.createElement("span");
-  score.className = "score";
-  score.textContent = r.quiz;
-  const acc = document.createElement("span");
-  acc.className = "acc";
-  acc.textContent = r.rating == null ? "—" : r.rating.toFixed(1);
-  acc.title = r.bets ? `Правильных: ${r.won}, всех попыток: ${r.bets}. Оценка = правильные² / все попытки, от 6 завершённых прогнозов` : "Нет завершённых прогнозов на исход";
-  const chg = document.createElement("span");
-  chg.className = "chg";
-  if (r.change > 0) { chg.textContent = `▲${r.change}`; chg.classList.add("plus"); }
-  else if (r.change < 0) { chg.textContent = `▼${-r.change}`; chg.classList.add("minus"); }
-  const ava = avatarEl(r, "mini");
-  // Тап по аватару или имени открывает профиль участника
-  if (r.id !== me.id) { ava.onclick = who.onclick = () => openUser(r); }
-  else { ava.onclick = who.onclick = () => openTab("profile"); }
-  li.append(rank, ava, who, score, acc, chg);
-  return li;
+  who.className = "table-participant";
+  who.onclick = () => (r.id === me.id ? openTab("profile") : openUser(r));
+  const label = document.createElement("span");
+  label.textContent = r.name;
+  const identity = document.createElement("span");
+  identity.className = "participant-identity";
+  identity.append(label);
+  if (r.qualified === true) {
+    const badge = document.createElement("span");
+    badge.className = "qualification-badge qualified";
+    badge.textContent = "Квалифицирован";
+    identity.append(badge);
+  }
+  who.append(avatarEl(r, "mini"), identity);
+  name.append(who);
+  tr.append(place, name);
+  for (const value of [
+    r.quizzes ?? 0,
+    r.quiz_percent == null ? "—" : r.quiz_percent + "%",
+    r.predictions ?? 0,
+    r.prediction_percent == null ? "—" : r.prediction_percent + "%",
+  ]) {
+    const td = document.createElement("td");
+    td.textContent = value;
+    tr.append(td);
+  }
+  return tr;
 }
-
-let boardObserver = null;
+function boardMessage(text) {
+  const tr = document.createElement("tr"),
+    td = document.createElement("td");
+  td.colSpan = 6;
+  td.className = "muted";
+  td.textContent = text;
+  tr.append(td);
+  return tr;
+}
 async function loadBoard() {
-  const period = boardPeriod;
-  const list = $("board");
-  list.innerHTML = '<li class="muted" role="status">Загружаем участников…</li>';
+  const selectedSeason = boardSeason,
+    list = $("board");
+  const table=list.closest("table");
+  table.classList.add("is-empty");
+  list.replaceChildren(boardMessage("Загружаем участников…"));
   $("board-me").classList.add("hidden");
   try {
-    const data = await api(`/api/leaderboard?period=${period}`);
-    if (period !== boardPeriod) return; // пока грузили, переключили период
-    list.innerHTML = "";
+    const data = await api(
+      "/api/leaderboard" + (selectedSeason ? "?season=" + encodeURIComponent(selectedSeason) : ""),
+    );
+    if (selectedSeason !== boardSeason) return;
+    list.replaceChildren();
+    table.classList.toggle("is-empty",!data.rows.length);
     $("board-note").textContent =
-      data.since == null ? `Участников: ${data.total}` :
-      `${period === "week" ? "За неделю" : "За месяц"} с ${new Date(data.since * 1000).toLocaleDateString("ru-RU", { day: "numeric", month: "long", timeZone: "Europe/Moscow" })}`;
-    let myRow = null;
-    for (const r of data.rows) {
-      const li = boardRow(r);
-      if (r.id === me.id) myRow = li;
-      list.appendChild(li);
-    }
-    if (!data.rows.length) list.innerHTML = '<li class="muted">Участников пока нет</li>';
-    // Своя строка закреплена внизу, пока её не видно в списке
-    const pinned = $("board-me");
-    pinned.innerHTML = "";
-    boardObserver?.disconnect();
-    if (data.me) pinned.appendChild(boardRow(data.me));
-    if (!data.me) pinned.classList.add("hidden");
-    else if (!myRow) pinned.classList.remove("hidden");
-    else {
-      boardObserver = new IntersectionObserver(([e]) => pinned.classList.toggle("hidden", e.isIntersecting));
-      boardObserver.observe(myRow);
-    }
+      data.example ? "Пример оформления · вымышленные участники" : data.season.pending_start ? "Первый сезон начнётся 1 декабря 2026 года" : "Участников: " + data.total + (data.qualification_frozen ? " · отбор зафиксирован" : "");
+    for (const r of data.rows) list.append(boardRow(r));
+    if (!data.rows.length) list.append(boardMessage(data.season.pending_start ? "Рейтинг появится после начала сезона" : "Участников пока нет"));
   } catch (e) {
-    list.innerHTML = "";
+    if (selectedSeason !== boardSeason) return;
+    table.classList.add("is-empty");
+    const row = boardMessage("");
+    showRetry(row.firstChild, "Не удалось загрузить таблицу", loadBoard);
+    list.replaceChildren(row);
     $("board-note").textContent = e.message;
-    const item = document.createElement("li");
-    showRetry(item, "Не удалось загрузить таблицу", loadBoard);
-    list.appendChild(item);
   }
 }
 
@@ -255,10 +263,14 @@ function fillUser(u) {
   $("u-avatar").style.backgroundImage = ava.style.backgroundImage;
   $("u-avatar").textContent = ava.textContent;
   $("u-name").textContent = u.name;
-  if (u.rank != null) $("u-rank").textContent = u.rank;
+  $("u-rank").parentElement.classList.add("hidden");
+  for(const id of ["u-balance","u-earned","u-spent"]) $(id).parentElement.classList.toggle("hidden",!("balance" in u));
+  $("u-public-stats").textContent = `Квалификация: ${u.qualified?"Квалифицирован":"Не квалифицирован"} · Викторины: ${u.quizzes??0} · Точность: ${u.quiz_percent==null?"—":u.quiz_percent+"%"} · Прогнозы: ${u.predictions??0} · Точность: ${u.prediction_percent==null?"—":u.prediction_percent+"%"}`;
+  $("u-quiz").parentElement.classList.add("hidden");
+  $("u-acc").parentElement.classList.add("hidden");
   if (u.balance != null) $("u-balance").textContent = fmt(u.balance);
-  if (u.quiz != null) $("u-quiz").textContent = u.quiz;
-  if ("accuracy" in u) $("u-acc").textContent = u.accuracy == null ? "—" : `${u.accuracy}%`;
+  $("u-quiz").textContent = u.quizzes??0;
+  $("u-acc").textContent = u.prediction_percent==null?"—":u.prediction_percent+"%";
   if ("username" in u) {
     $("u-username").textContent = u.username ? "@" + u.username : "";
     $("u-username").href = u.username ? `https://t.me/${encodeURIComponent(u.username)}` : "";
@@ -276,7 +288,7 @@ async function openUser(row) {
   openUserId = row.id;
   for (const f of ["u-username", "u-tenure", "u-rank", "u-balance", "u-earned", "u-spent", "u-quiz", "u-acc"]) $(f).textContent = "";
   $("u-tenure").textContent = "\u00a0";
-  fillUser({ id: row.id, name: row.name, photo_url: row.photo_url, ...(boardPeriod === "all" ? { rank: row.rank, quiz: row.quiz, accuracy: row.accuracy } : {}) });
+  fillUser(row);
   $("user-dialog").classList.remove("hidden");
   if (me.is_admin) {
     $("u-admin").classList.remove("hidden");
@@ -352,6 +364,7 @@ function appendHistory(list, items) {
     li.className = "hist";
     const label = document.createElement("span");
     label.textContent = TX_LABELS[t.type] || t.type;
+    if(t.is_admin_test){const note=document.createElement("span");note.className="reason";note.textContent="Прогноз администратора · вне сезонной статистики";label.append(note);}
     if (t.quiz) {
       const sub = document.createElement("span");
       sub.className = "reason";
@@ -599,6 +612,7 @@ function dayLabel(ts) {
 
 // Почему прогноз сейчас не принимается
 function closedNote(m) {
+  if(seasonInfo?.season.pending_start)return "Приём прогнозов начнётся 1 декабря 2026 года";
   if (m.status === "finished") return null;
   if (m.status === "cancelled") return "Матч отменён, прогнозы возвращены";
   if (m.status === "postponed") return "Матч перенесён, приём прогнозов закрыт";
@@ -607,7 +621,7 @@ function closedNote(m) {
 }
 
 function predLine(p) {
-  const what = `${outcomeLabel(p.market, p.outcome)} · ${fmt(p.stake)} BIST · вес ${p.price.toFixed(2)}`;
+  const what = `${p.is_admin_test ? "Админ · вне сезонной статистики · " : ""}${outcomeLabel(p.market, p.outcome)} · ${fmt(p.stake)} BIST · вес ${p.price.toFixed(2)}`;
   if (p.status === "won") return `✅ ${what} · выигрыш ${fmt(p.payout)}`;
   if (p.status === "lost") return `❌ ${what} · не сыграл`;
   if (p.status === "refunded") return `↩️ ${what} · возврат`;
@@ -634,6 +648,7 @@ function matchCard(m) {
   }
   teams.onclick = () => openBet(m, "1x2");
   card.append(top, teams);
+  if(m.admin_mode){const note=document.createElement("p");note.className="muted small";note.textContent="Режим администратора · вне сезонной статистики · обычный баланс";card.append(note);}
 
   const mine1x2 = m.my.find((p) => p.market === "1x2");
   if (Object.keys(m.odds).length || m.has_score) {
@@ -819,12 +834,13 @@ function closeBet() {
 
 function renderBet() {
   const m = bet.match;
+  $("bet-timing-rules").textContent = m.admin_mode ? "Один действующий прогноз на матч. Для администратора нет ограничений по времени и ожидания между изменениями. Обычный баланс, без учёта в сезонной статистике." : "Один прогноз на матч. Приём до начала матча. Замена или отмена — не чаще раза в 5 минут.";
   $("bet-title").textContent = `${m.home} — ${m.away}`;
   $("bet-sub").textContent = `${m.tournament_name} · ${dayLabel(m.start_time)}, ${kickoff(m.start_time)}`;
   const state = $("bet-state");
   const note = m.score ? `Итог основного времени: ${m.score.join(" : ")}` : m.open ? null : closedNote(m);
-  state.textContent = note || "";
-  state.classList.toggle("hidden", !note);
+  state.textContent = [note,m.admin_mode ? "Режим администратора: обычный баланс, прогноз не входит в сезонную статистику." : null].filter(Boolean).join(" · ");
+  state.classList.toggle("hidden", !state.textContent);
   document.querySelectorAll("#bet-markets button").forEach((b) => b.classList.toggle("active", b.dataset.market === bet.market));
 
   const odds = m.odds[bet.market] || {};
@@ -1054,16 +1070,16 @@ let editingQuiz = null; // id викторины в правке
 
 function renderQualify() {
   const need = quiz?.qualify || 100;
-  const have = Math.min(me.balance, need);
-  const done = me.balance >= need;
+  const have = Math.max(0,Math.min(me.balance, need));
+  const done = seasonInfo?.season.pending_start ? false : seasonInfo?.frozen ? seasonInfo.qualified : me.balance >= need;
   $("qualify").classList.toggle("done", done);
   $("qualify-num").textContent = `${fmt(me.balance)} / ${need} BIST`;
   $("qualify-bar").style.width = `${(have / need) * 100}%`;
   $("qualify-progress").setAttribute("aria-valuemax", need);
   $("qualify-progress").setAttribute("aria-valuenow", have);
-  $("qualify-text").textContent = done
-    ? "Порог квалификации достигнут"
-    : `Ещё ${fmt(need - me.balance)} BIST до квалификации`;
+  $("qualify-text").textContent = seasonInfo?.season.pending_start ? "Первый сезон начнётся 1 декабря 2026 года" : done
+    ? "Квалифицирован"
+    : "Не квалифицирован";
 }
 
 function mediaEl(media) {
@@ -1173,6 +1189,8 @@ function questionEl(q, i, live) {
     label.textContent = "Ваш ответ";
     box.append(label, input, btn, msg);
   }
+  if(q.voided){box.querySelectorAll('input,button').forEach(el=>el.remove());const note=document.createElement('p');note.textContent='Вопрос отменён. Начисление скорректировано.';box.append(note);}
+  if(q.opened||q.done){const report=document.createElement('button');report.className='btn ghost';report.textContent='Сообщить об ошибке';report.onclick=()=>openReport('quiz_error',q.id);box.append(report);}
   return box;
 }
 
@@ -1390,7 +1408,10 @@ function questionForm(q = {}) {
     <div class="qa-q-head"><span class="qa-n"></span><button class="icon-btn qa-del" title="Убрать вопрос">✕</button></div>
     <label>Текст вопроса<textarea class="input qa-text" maxlength="2000"></textarea></label>
     <div class="qa-file"><label>Медиафайл<input type="file" accept="image/*,audio/*,video/*,*/*"></label><span class="qa-file-name muted"></span><button class="icon-btn qa-file-del hidden" title="Убрать файл">✕</button></div>
+    <label>Источник задания<input class="input qa-source" maxlength="1000"></label>
     <label>Правильные ответы<textarea class="input qa-answers" placeholder="Каждый вариант с новой строки"></textarea></label>`;
+  if(q.id&&!q.voided_at){const remove=document.createElement('button');remove.className='btn ghost wide';remove.type='button';remove.textContent='Отменить ошибочный вопрос со сторно';remove.onclick=async()=>{const reason=prompt('Причина отмены вопроса и сторнирования наград');if(!reason?.trim())return;const url='/api/admin/questions/'+q.id+'/void';try{await api(url,{method:'POST',body:JSON.stringify({reason})});await loadQuizAdmin();loadQuiz();}catch(e){if(e.message.includes('После фиксации')){const decision=prompt('Отбор уже зафиксирован. Укажите отдельную причину сохранить опубликованные допуски. Для изменения допуска требуется отдельное решение администратора.');if(decision?.trim()){try{await api(url,{method:'POST',body:JSON.stringify({reason,retain_frozen_admissions:true,post_freeze_reason:decision})});await loadQuizAdmin();loadQuiz();}catch(e){showMsg($('qa-msg'),e.message,false);}}}else showMsg($('qa-msg'),e.message,false);}};box.append(remove);}
+  box.querySelector(".qa-source").value = q.source || "";
   box.querySelector(".qa-text").value = q.text || "";
   box.querySelector(".qa-answers").value = (q.answers || []).join("\n");
   const name = box.querySelector(".qa-file-name");
@@ -1450,7 +1471,7 @@ function editQuiz(z) {
   $("qa-title").value = z.title;
   $("qa-reward").value = z.reward;
   $("qa-questions").innerHTML = "";
-  z.questions.forEach((q) => $("qa-questions").appendChild(questionForm(q)));
+  z.questions.filter(q=>!q.voided_at).forEach((q) => $("qa-questions").appendChild(questionForm(q)));
   numberQuestions();
   $("qa-msg").classList.add("hidden");
   $("qa-form-title").scrollIntoView({ behavior: "smooth" });
@@ -1462,6 +1483,7 @@ async function saveQuiz() {
     reward: Number($("qa-reward").value),
     questions: [...document.querySelectorAll("#qa-questions .qa-q")].map((b) => ({
       id: Number(b.dataset.id) || null,
+      source: b.querySelector(".qa-source").value,
       text: b.querySelector(".qa-text").value,
       media_id: Number(b.dataset.media) || null,
       answers: b.querySelector(".qa-answers").value,
@@ -1527,6 +1549,7 @@ async function init() {
   try {
     me = await api("/api/me");
   } catch (e) {
+    if(e.data?.requires_processing_consent){renderProcessingConsent(e.data.policy);return;}
     showError(e.message);
     return;
   }
@@ -1554,11 +1577,7 @@ async function init() {
     $("u-more").onclick = loadUserHistory;
     loadAudit();
   }
-  document.querySelectorAll("#tab-table .segmented button").forEach((b) => (b.onclick = () => {
-    boardPeriod = b.dataset.period;
-    document.querySelectorAll("#tab-table .segmented button").forEach((x) => x.classList.toggle("active", x === b));
-    loadBoard();
-  }));
+  initComplianceUI();
   initPredictions();
   initQuizzes();
   // Подгрузка истории при прокрутке до конца списка
@@ -1569,6 +1588,376 @@ async function init() {
   $("nav").classList.remove("hidden");
   $("balance-chip").classList.remove("hidden");
   openTab(startTab());
+}
+
+function renderProcessingConsent(policy) {
+  for (const t of TABS) $("tab-" + t).classList.add("hidden");
+  $("nav").classList.add("hidden");
+  $("loading").classList.add("hidden");
+  const card = $("error");
+  card.className = "card";
+  card.replaceChildren();
+  const title = document.createElement("h1");
+  title.textContent = "Обработка данных";
+  const text = document.createElement("p");
+  text.style.whiteSpace = "pre-wrap";
+  text.textContent =
+    policy.processing_consent +
+    "\n" +
+    policy.operator +
+    "\n" +
+    policy.operator_address +
+    "\n" +
+    policy.contacts +
+    "\n" +
+    policy.policy_text +
+    "\n" +
+    policy.personal_data +
+    "\n" +
+    policy.purposes +
+    "\n" +
+    policy.retention +
+    "\n" +
+    policy.rights +
+    "\n" +
+    JSON.stringify(policy.services);
+  const accept = document.createElement("button");
+  accept.className = "btn wide";
+  accept.textContent = "Даю согласие на обработку данных";
+  accept.onclick = async () => {
+    accept.disabled = true;
+    try {
+      await api("/api/consents", {
+        method: "POST",
+        body: JSON.stringify({ granted: true, policy_version: policy.version, confirm_consent: true }),
+      });
+      location.reload();
+    } catch (e) {
+      showError(e.message);
+    }
+  };
+  const reject = document.createElement("p");
+  reject.textContent =
+    "Можно отказаться: не нажимайте кнопку и закройте приложение. Публикация профиля, аватара и реклама включаются отдельно.";
+  card.append(title, text, accept, reject);
+}
+let seasonInfo = null,
+  boardSeason = null,
+  privacyPolicy = null;
+function openReport(kind, id) {
+  if (bet) $("bet-dialog").classList.add("hidden");
+  openTab("profile");
+  $("request-kind").value = kind;
+  $("request-target").value = id || "";
+  $("request-panel").open = true;
+  $("request-message").focus();
+}
+async function loadSeasonInfo() {
+  try {
+    seasonInfo = await api("/api/season");
+    renderQualify();
+    const select = $("board-season");
+    select.replaceChildren(new Option(seasonInfo.season.label || seasonInfo.season.name, ""));
+    for (const s of seasonInfo.seasons)
+      if (s.id !== seasonInfo.season.id) select.add(new Option(s.label || s.id, s.id));
+    select.value = boardSeason || "";
+    if (seasonInfo.rules) {
+      const r = seasonInfo.rules,
+        labels = {
+          organizer: "Организатор",
+          contacts: "Контакты",
+          eligibility: "Условия участия",
+          season_id: "Сезон",
+          threshold: "Порог BIST",
+          pending_predictions: "Нерассчитанные прогнозы",
+          tasks: "Задания",
+          assessment: "Критерии оценки",
+          attempts: "Попыток для каждого участника",
+          tie_knowledge_task: "При равенстве",
+          prizes: "Призы",
+          prize_funding: "Финансирование",
+          appeals: "Обращения",
+          corrections: "Исправления",
+          disputes: "Спорные результаты",
+        };
+      const lines = Object.entries(labels).map(([key, label]) => label + ": " + r[key]);
+      for (const [key, label] of Object.entries({
+        cutoff: "Окончание отбора",
+        final_start: "Начало финала",
+        final_end: "Окончание финала",
+        results_at: "Объявление результатов",
+        prizes_due: "Выдача призов",
+        appeals_until: "Приём обращений до",
+      }))
+        lines.push(
+          label +
+            ": " +
+            new Date(r[key] * 1000).toLocaleString("ru-RU", { timeZone: "Europe/Minsk" }) +
+            " (Минск)",
+        );
+      $("final-rules").textContent = lines.join("\n\n");
+    }
+    const finals = await api("/api/finals");
+    const root = $("my-finals");
+    root.replaceChildren();
+    for (const f of finals.items) {
+      const card = document.createElement("div");
+      card.className = "card";
+      const title = document.createElement("h2");
+      title.textContent = "Финал " + f.season_id;
+      const btn = document.createElement("button");
+      btn.className = "btn wide";
+      btn.textContent = "Открыть финальную викторину";
+      btn.onclick = () => openFinal(f.season_id, card);
+      const history = document.createElement("button");
+      history.className = "btn ghost wide";
+      history.textContent = "Мои ответы финала";
+      history.onclick = async () => {
+        try {
+          const data = await api("/api/finals/" + f.season_id + "/history");
+          const p = document.createElement("p");
+          p.style.whiteSpace = "pre-wrap";
+          p.textContent = data.items.length
+            ? data.items
+                .map(
+                  (x) =>
+                    "Попытка " +
+                    x.round +
+                    " · " +
+                    new Date(x.submitted_at * 1000).toLocaleString("ru-RU") +
+                    "\n" +
+                    Object.entries(JSON.parse(x.answers))
+                      .map(([q, a]) => q + ": " + a)
+                      .join("\n") +
+                    "\nОценка: " +
+                    (x.score ?? "ожидает проверки"),
+                )
+                .join("\n\n")
+            : "Ответов пока нет";
+          card.append(p);
+        } catch (e) {
+          showError(e.message);
+        }
+      };
+      card.append(title, btn, history);
+      if (f.tiebreak) {
+        const tie = document.createElement("button");
+        tie.className = "btn ghost wide";
+        tie.textContent = "Дополнительное задание на знания";
+        tie.onclick = () => openKnowledgeTiebreak(f.season_id, card);
+        card.append(tie);
+      }
+      root.append(card);
+    }
+  } catch (e) {
+    $("final-rules").textContent = e.message;
+  }
+}
+async function openFinal(id, card) {
+  try {
+    const f = await api("/api/finals/" + id + "/enter", { method: "POST" });
+    const form = document.createElement("form");
+    form.className = "final-task";
+    const note = document.createElement("p");
+    note.textContent =
+      "Попыток для каждого участника: " + f.attempts + ". BIST не списываются и не влияют на результат.";
+    form.append(note);
+    for (const q of f.questions) {
+      const label = document.createElement("label");
+      label.textContent = q.text;
+      const input = document.createElement("textarea");
+      input.className = "input";
+      input.name = q.id;
+      input.required = true;
+      input.maxLength = 5000;
+      label.append(input);
+      form.append(label);
+    }
+    const send = document.createElement("button");
+    send.type = "submit";
+    send.className = "btn wide";
+    send.textContent = "Отправить ответы";
+    const msg = document.createElement("p");
+    form.append(send, msg);
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      send.disabled = true;
+      try {
+        await api("/api/finals/" + id + "/submit", {
+          method: "POST",
+          body: JSON.stringify({ answers: Object.fromEntries(new FormData(form)) }),
+        });
+        msg.textContent = "Ответы сохранены. Их проверит организатор по опубликованным критериям.";
+      } catch (e) {
+        msg.textContent = e.message;
+      } finally {
+        send.disabled = false;
+      }
+    };
+    card.replaceChildren(form);
+  } catch (e) {
+    const p = document.createElement("p");
+    p.textContent = e.message;
+    card.append(p);
+  }
+}
+async function openKnowledgeTiebreak(id, card) {
+  try {
+    const q = await api("/api/finals/" + id + "/tiebreak");
+    const form = document.createElement("form"),
+      label = document.createElement("label"),
+      input = document.createElement("textarea"),
+      note = document.createElement("p"),
+      send = document.createElement("button"),
+      message = document.createElement("p");
+    form.className = "final-task";
+    label.textContent = q.text;
+    input.className = "input";
+    input.required = true;
+    input.maxLength = 10000;
+    label.append(input);
+    note.textContent =
+      "Источник: " + q.source + ". Оценка: " + q.rubric + ". Одна попытка для каждого участника.";
+    send.className = "btn wide";
+    send.textContent = "Отправить ответ";
+    form.append(label, note, send, message);
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      send.disabled = true;
+      try {
+        await api("/api/finals/" + id + "/tiebreak", {
+          method: "POST",
+          body: JSON.stringify({ answer: input.value }),
+        });
+        message.textContent = "Ответ сохранён для проверки организатором.";
+      } catch (e) {
+        message.textContent = e.message;
+      } finally {
+        send.disabled = false;
+      }
+    };
+    card.replaceChildren(form);
+  } catch (e) {
+    const p = document.createElement("p");
+    p.textContent = e.message;
+    card.append(p);
+  }
+}
+async function loadPrivacy() {
+  try {
+    const data = await api("/api/policy");
+    privacyPolicy = data.policy;
+    const prefs = await api("/api/preferences");
+    $("processing-withdraw").classList.toggle("hidden", privacyPolicy?.processing_basis !== "consent");
+    $("pref-profile").checked = Boolean(prefs.public_profile);
+    $("pref-avatar").checked = Boolean(prefs.public_avatar);
+    $("pref-marketing").checked = Boolean(prefs.marketing_opt_out);
+    $("policy-content").textContent = privacyPolicy
+      ? `${privacyPolicy.operator}\n${privacyPolicy.contacts}\n${privacyPolicy.policy_text}\nЦели: ${privacyPolicy.purposes}\nОснования: ${privacyPolicy.legal_bases}\nХранение: ${privacyPolicy.retention}\nСервисы и страны: ${privacyPolicy.services.map((s) => s.name + " — " + s.purpose + " (" + s.countries.join(", ") + ")").join("; ")}\nОбращения: ${privacyPolicy.rights}`
+      : "Оператор и политика данных ещё не утверждены. До публикации политики включение публичности и рекламы недоступно; отключить их можно в любой момент.";
+    $("consent-text").textContent = privacyPolicy
+      ? `${privacyPolicy.publication_consent}\n${privacyPolicy.avatar_consent}\n${privacyPolicy.marketing_consent}\nСнятие отметки «Не получать рекламные уведомления» само по себе не означает согласия на рекламу. Согласия добровольные и отдельные; сохраняется версия ${privacyPolicy.version}.`
+      : "Снятая отметка не означает согласия на рекламу. Рекламные сообщения без отдельного согласия не отправляются.";
+  } catch (e) {
+    $("policy-content").textContent = e.message;
+  }
+}
+async function loadRequests() {
+  try {
+    const { items } = await api("/api/requests");
+    $("my-requests").replaceChildren();
+    for (const r of items) {
+      const li = document.createElement("li");
+      li.textContent =
+        `№${r.id} · ${{ open: "Принято", in_review: "Рассматривается", resolved: "Решено", rejected: "Отклонено" }[r.status] || r.status} · ${r.message}` +
+        (r.resolution ? " · " + r.resolution : "");
+      $("my-requests").append(li);
+    }
+  } catch (e) {
+    $("my-requests").textContent = e.message;
+  }
+}
+function initComplianceUI() {
+  // Browser-level deterrents only; Mini Apps cannot prevent OS screenshots or external cameras.
+  const isTask = (target) => target instanceof Element && Boolean(target.closest(".question, .final-task"));
+  const selectedTask = () => {
+    const selection = window.getSelection();
+    return (
+      selection &&
+      !selection.isCollapsed &&
+      [...document.querySelectorAll(".question,.final-task")].some((node) =>
+        selection.containsNode(node, true),
+      )
+    );
+  };
+  for (const event of ["copy", "cut", "contextmenu", "dragstart"])
+    document.addEventListener(event, (e) => {
+      if (
+        (isTask(e.target) || (["copy", "cut"].includes(e.type) && selectedTask())) &&
+        !e.target.closest("input,textarea")
+      )
+        e.preventDefault();
+    });
+  const conceal = (hidden) => document.documentElement.classList.toggle("tasks-obscured", hidden);
+  document.addEventListener("visibilitychange", () => conceal(document.hidden));
+  window.addEventListener("blur", () => conceal(true));
+  window.addEventListener("focus", () => conceal(document.hidden));
+  tg?.onEvent?.("deactivated", () => conceal(true));
+  tg?.onEvent?.("activated", () => conceal(document.hidden));
+
+  $("board-season").onchange = () => {
+    boardSeason = $("board-season").value || null;
+    loadBoard();
+  };
+  $("bet-report").onclick = () => openReport("prediction_error", bet?.match.id);
+  $("processing-withdraw").onclick = async () => {
+    try {
+      await api("/api/consents", { method: "POST", body: JSON.stringify({ granted: false }) });
+      renderProcessingConsent(privacyPolicy);
+    } catch (e) {
+      showMsg($("preferences-msg"), e.message, false);
+    }
+  };
+  $("preferences-save").onclick = async () => {
+    try {
+      const values = {
+        public_profile: $("pref-profile").checked,
+        public_avatar: $("pref-avatar").checked,
+        marketing_opt_out: $("pref-marketing").checked,
+        policy_version: privacyPolicy?.version,
+        confirm_consent: true,
+      };
+      await api("/api/preferences", { method: "PUT", body: JSON.stringify(values) });
+      showMsg($("preferences-msg"), "Выбор сохранён", true);
+      await loadPrivacy();
+    } catch (e) {
+      showMsg($("preferences-msg"), e.message, false);
+    }
+  };
+  $("request-send").onclick = async () => {
+    const btn = $("request-send");
+    btn.disabled = true;
+    try {
+      const r = await api("/api/requests", {
+        method: "POST",
+        body: JSON.stringify({
+          kind: $("request-kind").value,
+          target_id: Number($("request-target").value) || null,
+          message: $("request-message").value,
+        }),
+      });
+      showMsg($("request-msg"), "Обращение №" + r.id + " сохранено", true);
+      $("request-message").value = "";
+      await loadRequests();
+    } catch (e) {
+      showMsg($("request-msg"), e.message, false);
+    } finally {
+      btn.disabled = false;
+    }
+  };
+  loadSeasonInfo();
+  loadPrivacy();
+  loadRequests();
 }
 
 // Keep keyboard focus inside an open sheet and return it to its opener.

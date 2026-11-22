@@ -28,7 +28,7 @@ test("дашборд: одно обращение к базе, цифры схо
   db.raw.prepare("UPDATE matches SET status = 'finished' WHERE id = 1").run();
   tx(3, -4, "bet", NOW - 3 * 3600);
   tx(3, 8, "payout", NOW - 60);
-  await createQuiz(db, 1, { title: "Q", questions: [{ text: "?", answers: "да" }] }, NOW - DAY);
+  await createQuiz(db, 1, { title: "Q", questions: [{ source: "test: verified fixture", text: "?", answers: "да" }] }, NOW - DAY);
   const qid = db.raw.prepare("SELECT id FROM quiz_questions").get().id;
   db.raw.prepare("INSERT INTO quiz_answers (user_id, question_id, opened_at, attempts, correct, answered_at) VALUES (4, ?, ?, 1, 0, ?)").run(qid, NOW - 100, NOW - 90);
 

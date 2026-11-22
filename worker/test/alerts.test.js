@@ -52,7 +52,7 @@ test("оповещения: всё в порядке — ничего не от�
   setStatus({ failures: 1, quota: { left: 100, limit: 250 } });
   // Три викторины: текущая до полуночи и ещё две по дню — очередь на 2+ дня вперёд
   for (const t of ["A", "B", "C"]) {
-    await createQuiz(db, 1, { title: t, questions: [{ text: "?", answers: "да" }] }, NOW);
+    await createQuiz(db, 1, { title: t, questions: [{ source: "test: verified fixture", text: "?", answers: "да" }] }, NOW);
   }
   assert.deepEqual(await checkAlerts(env(), NOW), []);
   assert.deepEqual(await checkAlerts(env(), NOW + 86400), ["quiz_queue"]);

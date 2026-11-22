@@ -10,7 +10,6 @@
 </head>
 <body>
   <header class="top">
-    <div class="logo">TOTS</div>
     <div id="balance-chip" class="chip hidden"><span id="chip-balance">0</span> BIST</div>
   </header>
 
@@ -23,11 +22,12 @@
       <div class="page-heading"><h1>Викторины</h1><p>Проверь свои футбольные знания</p></div>
       <!-- Квалификация в финал сезона: видна всегда -->
       <div id="qualify" class="card qualify">
-        <div class="qualify-head"><b>Путь в финал</b><span id="qualify-num"></span></div>
+        <div class="qualify-head"><b>Путь в финальную викторину</b><span id="qualify-num"></span></div>
         <div id="qualify-progress" class="progress" role="progressbar" aria-label="Прогресс квалификации" aria-valuemin="0" aria-valuemax="100"><div id="qualify-bar"></div></div>
         <div id="qualify-text" class="muted small"></div>
-        <details class="disclosure"><summary>Условия финала</summary><p class="muted small">Наберите 100 BIST для квалификации. Призы получат три лучших участника финальной викторины. Дополнительные BIST не дают преимуществ в финале.</p></details>
+        <details class="disclosure"><summary>Условия финала</summary><p class="muted small">Текущий баланс от 100 BIST даёт допуск. До момента окончания отбора — за одну неделю до конца сезона — допуск можно потерять и восстановить. После допуска большее количество BIST не даёт преимуществ, не увеличивает приз и не даёт дополнительных попыток. Условия и призы публикуются организатором заранее.</p></details>
       </div>
+      <details class="card disclosure"><summary>Правила сезона и финала</summary><p class="muted small">Нельзя делиться заданиями и ответами на викторины, публиковать их или передавать другим участникам до окончания викторины. На ответ в новых викторинах даётся 20 секунд с момента открытия вопроса. Таймер продолжает идти при сворачивании приложения.</p><div id="final-rules" class="muted">Утверждённые правила пока не опубликованы.</div></details><div id="my-finals"></div>
       <div id="quiz-current"><div class="card muted">Загрузка…</div></div>
       <details id="quiz-past-card" class="card disclosure hidden">
         <summary>Прошлые викторины</summary>
@@ -63,6 +63,7 @@
     <!-- Прогнозы -->
     <section id="tab-predictions" class="tab hidden">
       <div class="page-heading"><h1>Прогнозы</h1><p>Выбери матч и свой исход</p></div>
+      <p class="muted small">BIST начисляются бесплатно. Их нельзя купить, продать, передать, вывести или обменять на деньги, товары и сертификаты.</p>
       <div id="pred-view" class="segmented">
         <button data-view="matches" class="active">Матчи</button>
         <button data-view="mine">Мои прогнозы</button>
@@ -83,18 +84,13 @@
 
     <!-- Таблица -->
     <section id="tab-table" class="tab hidden">
-      <div class="page-heading"><h1>Таблица</h1><p>Рейтинг по точности и числу верных исходов</p></div>
-      <div class="segmented" role="tablist">
-        <button data-period="all" class="active">Общая</button>
-        <button data-period="week">Неделя</button>
-        <button data-period="month">Месяц</button>
-      </div>
+      <div class="page-heading"><h1>Таблица</h1><p>Рейтинг по викторинам и точности ответов</p></div>
+      <label for="board-season">Сезон</label><select id="board-season" class="input"><option value="">Текущий сезон</option></select>
       <div class="card board-card">
         <div id="board-note" class="muted small"></div>
-        <div class="board-head"><span>Участник</span><span class="quiz-heading" title="Правильные ответы в викторинах">Ответы</span><span class="accuracy-heading" title="Взвешенная оценка исходов">Оценка ↓</span></div>
-        <ol id="board" class="board"></ol>
+        <div class="table-scroll" role="region" aria-label="Таблица рейтинга" tabindex="0"><table class="rating-table"><caption class="sr-only">Рейтинг участников сезона по викторинам</caption><thead><tr><th rowspan="2" scope="col" class="place-cell">Место</th><th rowspan="2" scope="col" class="name-cell">Участник</th><th colspan="2" scope="colgroup">Викторины</th><th colspan="2" scope="colgroup">Прогнозы</th></tr><tr><th scope="col">Кол-во</th><th scope="col">Точность</th><th scope="col">Кол-во</th><th scope="col">Точность</th></tr></thead><tbody id="board"></tbody></table></div><p class="table-hint muted small">Листайте таблицу вбок, чтобы увидеть все показатели.</p>
       </div>
-      <details class="disclosure help-block"><summary>Как считается оценка</summary><p class="muted">Оценка = правильные² / все попытки. Все попытки — завершённые правильные и неправильные прогнозы на исход. Отменённые и ожидающие результата не учитываются.</p><p class="muted">80 правильных из 100 попыток дают 64 балла. Оценка доступна после 6 попыток. При равенстве — дата регистрации. Ответы викторин и точный счёт на место не влияют.</p></details>
+      <details class="disclosure help-block"><summary>Как считаются показатели</summary><p class="muted">Викторины — завершённые попытки; точность — по действительным вопросам. Прогнозы — рассчитанные верные и неверные прогнозы всех рынков. Отмены и возвраты исключены. Если данных нет, показан прочерк.</p><p class="muted">Сортировка по викторинам и точности ответов. Оценка = количество завершённых викторин × (правильные ответы / все завершённые действительные вопросы). Выше оценка — выше место. При равной оценке место общее; ник и ID задают порядок внутри равенства. Прогнозы и BIST не влияют на место.</p></details>
       <div id="board-me" class="board-me hidden"></div>
     </section>
 
@@ -128,6 +124,21 @@
         <div id="history-more" class="muted small center hidden">Загрузка…</div>
       </div>
 
+      <details class="card disclosure"><summary>Приватность и уведомления</summary>
+        <p class="muted small">Баланс и суммы видны только вам и администраторам. Вход через Telegram не означает согласия на публикацию профиля.</p>
+        <div id="policy-content" class="policy-content muted"></div>
+        <label class="check-row"><input id="pref-profile" type="checkbox">Публиковать ник, статистику и квалификацию в таблице</label>
+        <label class="check-row"><input id="pref-avatar" type="checkbox">Публиковать аватар Telegram</label>
+        <label class="check-row"><input id="pref-marketing" type="checkbox">Не получать рекламные уведомления</label>
+        <p id="consent-text" class="muted small"></p><button id="preferences-save" class="btn wide">Сохранить выбор</button><div id="preferences-msg" class="msg hidden"></div><button id="processing-withdraw" class="btn ghost wide hidden">Отозвать согласие на обработку данных</button>
+      </details>
+      <details id="request-panel" class="card disclosure"><summary><span class="request-symbol" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none"><path d="M16 5 29 27H3L16 5Z" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/><path d="M16 13v6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><circle cx="16" cy="23" r="1.4" fill="currentColor"/></svg></span><span>Сообщить об ошибке или обратиться по данным</span></summary>
+        <label>Тип обращения<select id="request-kind" class="input"><option value="quiz_error">Ошибка викторины</option><option value="prediction_error">Ошибка прогноза</option><option value="data_correction">Исправление персональных данных</option><option value="data_deletion">Удаление персональных данных</option><option value="privacy_question">Вопрос о данных</option></select></label>
+        <label>Номер вопроса или матча, если известен<input id="request-target" class="input" type="number" min="1"></label>
+        <label>Описание<textarea id="request-message" class="input" maxlength="4000"></textarea></label>
+        <button id="request-send" class="btn wide">Отправить обращение</button><div id="request-msg" class="msg hidden"></div><ul id="my-requests" class="list"></ul>
+      </details>
+      <details class="card disclosure about-app"><summary>О приложении</summary><p class="muted small">Викторины и спортивные прогнозы, позволяющие растить вашу насмотренность и знания в футболе</p><details class="disclosure"><summary>Источники спортивных данных</summary><p class="muted small">Football data provided by the <a href="https://www.football-data.org/" target="_blank" rel="noopener noreferrer">Football-Data.org API</a>. Коэффициенты: OddsPapi.</p></details></details>
       <!-- Дашборд: только администраторам -->
       <details id="dash" class="card disclosure admin-zone hidden">
         <summary>Дашборд администратора</summary>
@@ -181,14 +192,15 @@
         </div>
       </div>
       <div class="ustats">
-        <div><div class="muted">Место</div><b id="u-rank">—</b></div>
+        <div class="hidden"><div class="muted">Место</div><b id="u-rank">—</b></div>
         <div><div class="muted">Викторины</div><b id="u-quiz">—</b></div>
-        <div><div class="muted">Исходы</div><b id="u-acc">—</b></div>
+        <div><div class="muted">Точность прогнозов</div><b id="u-acc">—</b></div>
         <div><div class="muted">Баланс</div><b id="u-balance" class="gold">—</b></div>
         <div><div class="muted">Получено</div><b id="u-earned" class="plus">—</b></div>
         <div><div class="muted">Потрачено</div><b id="u-spent" class="minus">—</b></div>
       </div>
 
+      <div id="u-public-stats" class="muted small"></div>
       <!-- Админка в карточке: только для администраторов -->
       <div id="u-admin" class="u-admin hidden">
         <h3>🛠 Админка</h3>
@@ -234,8 +246,9 @@
       </div>
       <button id="bet-cancel" class="btn wide ghost hidden">Отменить прогноз</button>
       <div id="bet-msg" class="msg hidden"></div>
-      <p class="muted small rules">Один прогноз на матч. Приём до начала матча. Замена или отмена — не чаще раза в 5 минут.</p>
-      <details class="disclosure"><summary>Все правила прогноза</summary><p class="muted small">Вес фиксируется при подтверждении; при выигрыше ставка умножается на него. Можно выбрать исход или точный счёт. Учитывается только основное время. Новый прогноз заменит предыдущий на этот матч.</p></details>
+      <button id="bet-report" class="btn ghost wide">Сообщить об ошибке матча</button>
+      <p id="bet-timing-rules" class="muted small rules">Один прогноз на матч. Приём до начала матча. Замена или отмена — не чаще раза в 5 минут.</p>
+      <details class="disclosure"><summary>Все правила прогноза</summary><p class="muted small">Вес фиксируется при подтверждении; при выигрыше ставка умножается на него. Можно выбрать исход или точный счёт. Учитывается только основное время. Новый прогноз заменит действующий прогноз на этот матч.</p></details>
 
       <!-- Исправление счёта: только администраторам, только для завершённых матчей -->
       <div id="bet-admin" class="u-admin hidden">

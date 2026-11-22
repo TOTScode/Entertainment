@@ -7,7 +7,7 @@ const MSK = 3 * 3600; // Москва: UTC+3 без перехода на лет
 const DAY = 86400;
 const GRACE = 5; // секунд запаса на задержку сети при ответе с таймером
 export const QUALIFY_BIST = 100; // порог квалификации в финальную викторину сезона
-export const DEFAULT_SETTINGS = { every_days: 1, time_limit: 60, attempts: 1 };
+export const DEFAULT_SETTINGS = { every_days: 1, time_limit: 20, attempts: 1 };
 const SETTINGS_KEY = "quiz_settings";
 const PAST_LIMIT = 10;
 
@@ -97,13 +97,16 @@ function playerQuestion(q, a, settings, ended, now) {
   const expired = deadline != null && now > deadline + GRACE;
   const out = {
     id: q.id,
+    voided: Boolean(q.voided_at),
+    source: opened || ended ? q.source : null,
+    version: q.version,
     position: q.position,
     opened,
     correct: Boolean(a?.correct),
     answer: a?.answer ?? null,
     attempts_left: expired ? 0 : attemptsLeft,
     deadline,
-    done: Boolean(a?.correct) || attemptsLeft === 0 || expired,
+    done: Boolean(q.voided_at) || Boolean(a?.correct) || attemptsLeft === 0 || expired,
   };
   if (opened || ended) Object.assign(out, { text: q.text, media: mediaOf(q) });
   if (ended) out.answers = JSON.parse(q.answers);
@@ -124,8 +127,8 @@ export async function quizState(db, userId, now) {
     db.prepare("SELECT value FROM api_state WHERE key = ?").bind(SETTINGS_KEY),
     db
       .prepare(
-        "SELECT z.id, z.title, z.starts_at, z.ends_at, COUNT(q.id) AS total, " +
-        "(SELECT COUNT(*) FROM quiz_answers a JOIN quiz_questions q2 ON q2.id = a.question_id WHERE q2.quiz_id = z.id AND a.user_id = ?2 AND a.correct = 1) AS right_count " +
+        "SELECT z.id, z.title, z.starts_at, z.ends_at, SUM(q.voided_at IS NULL) AS total, " +
+        "(SELECT COUNT(*) FROM quiz_answers a JOIN quiz_questions q2 ON q2.id = a.question_id WHERE q2.quiz_id = z.id AND a.user_id = ?2 AND a.correct = 1 AND q2.voided_at IS NULL) AS right_count " +
         `FROM quizzes z LEFT JOIN quiz_questions q ON q.quiz_id = z.id WHERE z.ends_at <= ?1 GROUP BY z.id ORDER BY z.ends_at DESC LIMIT ${PAST_LIMIT}`,
       )
       .bind(now, userId),
@@ -136,14 +139,14 @@ export async function quizState(db, userId, now) {
   return {
     now,
     qualify: QUALIFY_BIST,
-    settings: { time_limit: s.time_limit, attempts: s.attempts },
+    settings: { time_limit: z?.time_limit ?? s.time_limit, attempts: z?.attempts_limit ?? s.attempts },
     current: z
       ? {
         id: z.id,
         title: z.title,
         reward: toBist(z.reward),
         ends_at: z.ends_at,
-        questions: questions.results.map((q) => playerQuestion(q, answers.get(q.id), s, false, now)),
+        questions: questions.results.map((q) => playerQuestion(q, answers.get(q.id), { ...s, attempts: z.attempts_limit ?? s.attempts, time_limit: z.time_limit ?? s.time_limit }, false, now)),
       }
       : null,
     past: past.results.map((p) => ({ id: p.id, title: p.title, ends_at: p.ends_at, total: p.total, right: p.right_count })),
@@ -170,22 +173,23 @@ export async function pastQuiz(db, userId, quizId, now) {
     reward: toBist(z.reward),
     ends_at: z.ends_at,
     ended,
-    questions: questions.results.map((q) => playerQuestion(q, answers.get(q.id), s, ended, now)),
+    questions: questions.results.map((q) => playerQuestion(q, answers.get(q.id), { ...s, attempts: z.attempts_limit ?? s.attempts, time_limit: z.time_limit ?? s.time_limit }, ended, now)),
   };
 }
 
 async function loadQuestion(db, userId, questionId, now) {
   const [q, a, settings] = await db.batch([
     db
-      .prepare(`${QUESTION_SQL.replace("SELECT q.*", "SELECT q.*, z.starts_at, z.ends_at, z.reward")} JOIN quizzes z ON z.id = q.quiz_id WHERE q.id = ?`)
+      .prepare(`${QUESTION_SQL.replace("SELECT q.*", "SELECT q.*, z.starts_at, z.ends_at, z.reward, z.attempts_limit, z.time_limit")} JOIN quizzes z ON z.id = q.quiz_id WHERE q.id = ?`)
       .bind(questionId),
     db.prepare("SELECT * FROM quiz_answers WHERE user_id = ? AND question_id = ?").bind(userId, questionId),
     db.prepare("SELECT value FROM api_state WHERE key = ?").bind(SETTINGS_KEY),
   ]);
   const question = q.results[0];
   if (!question || question.starts_at == null || question.starts_at > now) throw new QuizError("Вопрос не найден", 404);
+  if (question.voided_at) throw new QuizError("Вопрос отменён");
   if (question.ends_at <= now) throw new QuizError("Эта викторина уже закончилась");
-  return { question, answer: a.results[0] || null, settings: parseSettings(settings.results[0]) };
+  return { question, answer: a.results[0] || null, settings: { ...parseSettings(settings.results[0]), attempts: question.attempts_limit ?? parseSettings(settings.results[0]).attempts, time_limit: question.time_limit ?? parseSettings(settings.results[0]).time_limit } };
 }
 
 // Открыть вопрос: с этого момента идёт время на ответ
@@ -219,15 +223,15 @@ export async function answerQuestion(db, userId, questionId, text, now) {
     db
       .prepare(
         "UPDATE quiz_answers SET attempts = attempts + 1, correct = ?, answer = ?, answered_at = ? " +
-        "WHERE user_id = ? AND question_id = ? AND correct = 0 AND attempts < ? AND ? <= ?",
+        "WHERE user_id = ? AND question_id = ? AND correct = 0 AND attempts < ? AND ? <= ? AND EXISTS (SELECT 1 FROM quiz_questions WHERE id = question_id AND voided_at IS NULL)",
       )
       .bind(correct, answer, now, userId, questionId, settings.attempts, now, limit),
     // Награда — только если правильный ответ записан; повторно не начисляется (уникальный индекс)
     db
       .prepare(
         "INSERT OR IGNORE INTO transactions (user_id, amount, type, ref, created_at) " +
-        "SELECT ?1, ?2, 'quiz_reward', 'quiz_question:' || ?3, ?4 " +
-        "WHERE ?2 > 0 AND EXISTS (SELECT 1 FROM quiz_answers WHERE user_id = ?1 AND question_id = ?3 AND correct = 1)",
+        "SELECT ?1, ?2, 'quiz_reward', 'quiz_question:' || CAST(?3 AS INTEGER), ?4 " +
+        "WHERE ?2 > 0 AND EXISTS (SELECT 1 FROM quiz_answers WHERE user_id = ?1 AND question_id = ?3 AND correct = 1) AND EXISTS (SELECT 1 FROM quiz_questions WHERE id = ?3 AND voided_at IS NULL) AND NOT EXISTS (SELECT 1 FROM transactions WHERE user_id = ?1 AND type = 'quiz_reward' AND ref LIKE 'quiz_question:%' AND CAST(substr(ref,15) AS INTEGER) = ?3)",
       )
       .bind(userId, question.reward, questionId, now),
     db.prepare("SELECT * FROM quiz_answers WHERE user_id = ? AND question_id = ?").bind(userId, questionId),
@@ -263,7 +267,8 @@ function validateQuiz(body) {
       .filter((a) => normalizeAnswer(a));
     if (!text && !q.media_id) throw new QuizError(`Вопрос ${i + 1}: нужен текст или файл`, 400);
     if (!answers.length) throw new QuizError(`Вопрос ${i + 1}: укажите хотя бы один правильный ответ`, 400);
-    return { id: Number(q.id) || null, text, media_id: Number(q.media_id) || null, answers: [...new Set(answers)].slice(0, 20) };
+    if (!String(q.source || "").trim()) throw new QuizError(`Вопрос ${i + 1}: укажите источник`, 400);
+    return { source: String(q.source).trim().slice(0, 1000), id: Number(q.id) || null, text, media_id: Number(q.media_id) || null, answers: [...new Set(answers)].slice(0, 20) };
   });
   return { title, reward: toUnits(reward), questions: clean };
 }
@@ -283,7 +288,7 @@ export async function adminQuizzes(db, now) {
   const byQuiz = new Map();
   for (const q of questions.results) {
     if (!byQuiz.has(q.quiz_id)) byQuiz.set(q.quiz_id, []);
-    byQuiz.get(q.quiz_id).push({ id: q.id, text: q.text, media_id: q.media_id, media: mediaOf(q), answers: JSON.parse(q.answers) });
+    byQuiz.get(q.quiz_id).push({ id: q.id, text: q.text, media_id: q.media_id, media: mediaOf(q), source: q.source, version: q.version, voided_at: q.voided_at, answers: JSON.parse(q.answers) });
   }
   const st = new Map(stats.results.map((r) => [r.quiz_id, r]));
   return {
@@ -307,11 +312,11 @@ function questionStatements(db, quizId, questions) {
   return questions.map((q, i) =>
     q.id
       ? db
-        .prepare("UPDATE quiz_questions SET position = ?, text = ?, media_id = ?, answers = ? WHERE id = ? AND quiz_id = ?")
-        .bind(i + 1, q.text, q.media_id, JSON.stringify(q.answers), q.id, quizId)
+        .prepare("UPDATE quiz_questions SET position = ?, text = ?, media_id = ?, answers = ?, source = ?, version = version + 1 WHERE id = ? AND quiz_id = ?")
+        .bind(i + 1, q.text, q.media_id, JSON.stringify(q.answers), q.source, q.id, quizId)
       : db
-        .prepare("INSERT INTO quiz_questions (quiz_id, position, text, media_id, answers) VALUES (?, ?, ?, ?, ?)")
-        .bind(quizId, i + 1, q.text, q.media_id, JSON.stringify(q.answers)),
+        .prepare("INSERT INTO quiz_questions (quiz_id, position, text, media_id, answers, source) VALUES (?, ?, ?, ?, ?, ?)")
+        .bind(quizId, i + 1, q.text, q.media_id, JSON.stringify(q.answers), q.source),
   );
 }
 
@@ -320,10 +325,10 @@ export async function createQuiz(db, adminId, body, now) {
   const settings = await getSettings(db);
   const res = await db
     .prepare(
-      "INSERT INTO quizzes (title, reward, position, created_by, created_at, updated_at) " +
-      "VALUES (?, ?, (SELECT COALESCE(MAX(position), 0) + 1 FROM quizzes), ?, ?, ?)",
+      "INSERT INTO quizzes (title, reward, position, created_by, created_at, updated_at, attempts_limit, time_limit) " +
+      "VALUES (?, ?, (SELECT COALESCE(MAX(position), 0) + 1 FROM quizzes), ?, ?, ?, ?, ?)",
     )
-    .bind(quiz.title, quiz.reward, adminId, now, now)
+    .bind(quiz.title, quiz.reward, adminId, now, now, settings.attempts, settings.time_limit)
     .run();
   const id = res.meta.last_row_id;
   await db.batch([
@@ -342,14 +347,14 @@ async function getQuiz(db, id, now) {
 
 // Правка викторины до её окончания. Удалённые вопросы удаляются вместе с ответами игроков.
 export async function updateQuiz(db, id, body, now) {
-  await getQuiz(db, id, now);
+  const existing = await getQuiz(db, id, now);
+  if (existing.starts_at != null && existing.starts_at <= now) throw new QuizError("Начатую викторину нельзя переписывать; отмените ошибочный вопрос с причиной");
   const quiz = validateQuiz(body);
   const keep = quiz.questions.filter((q) => q.id).map((q) => q.id);
-  const gone = `quiz_id = ? AND id NOT IN (${keep.map(() => "?").join(",") || "NULL"})`;
+  const gone = keep.length ? `quiz_id = ? AND id NOT IN (${keep.map(() => "?").join(",")})` : "quiz_id = ?";
   await db.batch([
     db.prepare("UPDATE quizzes SET title = ?, reward = ?, updated_at = ? WHERE id = ?").bind(quiz.title, quiz.reward, now, id),
-    db.prepare(`DELETE FROM quiz_answers WHERE question_id IN (SELECT id FROM quiz_questions WHERE ${gone})`).bind(id, ...keep),
-    db.prepare(`DELETE FROM quiz_questions WHERE ${gone}`).bind(id, ...keep),
+    db.prepare(`UPDATE quiz_questions SET voided_at = ?, version = version + 1 WHERE ${gone} AND voided_at IS NULL`).bind(now, id, ...keep),
     ...questionStatements(db, id, quiz.questions),
   ]);
 }
@@ -362,8 +367,8 @@ export async function deleteQuiz(db, id, now) {
     await db.prepare("UPDATE quizzes SET ends_at = ?, updated_at = ? WHERE id = ?").bind(now, now, id).run();
   } else {
     await db.batch([
-      db.prepare("DELETE FROM quiz_questions WHERE quiz_id = ?").bind(id),
-      db.prepare("DELETE FROM quizzes WHERE id = ?").bind(id),
+      db.prepare("UPDATE quiz_questions SET voided_at = ?, version = version + 1 WHERE quiz_id = ?").bind(now,id),
+      db.prepare("UPDATE quizzes SET starts_at = ?, ends_at = ?, updated_at = ? WHERE id = ?").bind(now,now,now,id),
     ]);
   }
   await db.batch(await rescheduleStatements(db, now, settings.every_days));

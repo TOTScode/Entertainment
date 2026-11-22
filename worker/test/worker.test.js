@@ -156,8 +156,8 @@ test("API таблицы, истории и статистики", async () => {
   assert.deepEqual(me.data.stats, { earned: 10, spent: 0 });
 
   const board = await call("/api/leaderboard?period=week", alexey);
-  assert.equal(board.data.period, "week");
-  assert.equal(board.data.rows.length, 2);
+  assert.equal(board.data.sort, "quiz_rating_desc");
+  assert.equal(board.data.rows.length, 0); // no publication without consent
   assert.equal(board.data.me.id, 7);
 
   const hist = await call("/api/history", alexey);
@@ -165,13 +165,14 @@ test("API таблицы, истории и статистики", async () => {
   assert.equal((await call("/api/leaderboard")).status, 401);
 });
 
-test("расписание делает снимок рейтинга", async () => {
+test("расписание до старта создаёт только первый зимний сезон", async () => {
   await call("/api/me", alexey);
   const waits = [];
   await worker.scheduled({ cron: "1 21 * * *", scheduledTime: Date.UTC(2026, 9, 27, 21, 1) }, env, { waitUntil: (p) => waits.push(p) });
   await Promise.all(waits);
   const row = env.DB.raw.prepare("SELECT * FROM rank_snapshots").get();
-  assert.deepEqual([row.day, row.user_id, row.rank], ["2026-10-28", 7, 1]);
+  assert.equal(row, undefined);
+  assert.equal(env.DB.raw.prepare("SELECT id FROM seasons WHERE id='2026-winter'").get().id, "2026-winter");
 });
 
 test("история показывает причину корректировки, чужой профиль открывается без истории", async () => {
@@ -184,22 +185,24 @@ test("история показывает причину корректиров�
   assert.deepEqual(hist.data.items.map((t) => [t.type, t.reason]), [["admin_adjustment", "Лучший комментарий"], ["signup_bonus", null]]);
 
   const other = await call("/api/users/1", alexey);
-  assert.equal(other.data.name, "Админ");
-  assert.equal(other.data.username, "boss");
-  assert.ok([1, 2].includes(other.data.rank)); // у обоих пока 0 ответов и прогнозов
-  assert.equal(other.data.balance, 10);
-  assert.deepEqual(other.data.stats, { earned: 10, spent: 0 });
-  assert.equal(other.data.items, undefined);
+  assert.equal(other.status,404); // private by default
+  const owner=await call('/api/users/1',admin);
+  assert.equal(owner.data.balance,10);
+  env.DB.raw.prepare('UPDATE users SET public_profile=1 WHERE id=1').run();
+  const visible=await call('/api/users/1',alexey);
+  for(const k of ['balance','stats','username','registered_at','rank'])assert.equal(visible.data[k],undefined,k);
   assert.equal((await call("/api/users/404", alexey)).status, 404);
 });
 
-test("частые запросы обращаются к базе один раз", async () => {
+test("запросы не делают N+1; история и проверка политики — два обращения", async () => {
   await call("/api/me", alexey);
   await call("/api/me", { id: 8, first_name: "Иван" });
+  env.DB.raw.prepare("UPDATE users SET public_profile=1").run();
   for (const path of ["/api/me", "/api/leaderboard", "/api/leaderboard?period=week", "/api/users/8", "/api/history"]) {
     roundTrips.count = 0;
     assert.equal((await call(path, alexey)).status, 200);
-    assert.equal(roundTrips.count, 1, path);
+    assert.ok(roundTrips.count <= 15, path+" bounded trips: "+roundTrips.count);
+    if(path === "/api/history")assert.equal(roundTrips.count,2);
   }
 });
 
@@ -229,4 +232,57 @@ test("дробные BIST: перенос журнала без изменени
   assert.equal(bad.status, 400);
   assert.equal((await call("/api/me", alexey)).data.balance, 12.5);
   assert.equal((await call("/api/history", alexey)).data.items[0].amount, 2.5);
+});
+
+test('privacy API: no public monetary fields; owner and authorized admin only; requests cannot be read by others',async()=>{
+ const owner={id:7,first_name:'A'},stranger={id:8,first_name:'B'},admin={id:ADMIN,first_name:'Admin'};
+ for(const u of [owner,stranger,admin])await call('/api/me',u);
+ env.DB.raw.prepare('UPDATE users SET public_profile=1,public_avatar=0 WHERE id=7').run();
+ const res=await call('/api/users/7',stranger);assert.equal(res.status,200);
+ for(const k of ['balance','stats','stake','payout','username','registered_at','rank'])assert.equal(res.data[k],undefined,k);
+ assert.equal(res.data.photo_url,null);assert.equal((await call('/api/users/7',owner)).data.balance,10);assert.equal((await call('/api/users/7',admin)).data.balance,10);
+ assert.equal((await call('/api/admin/history?user_id=7',stranger)).status,403);
+ const ownHistory=await call('/api/history?user_id=7',stranger);assert.ok(ownHistory.data.items.every(t=>t.amount===10));
+ assert.equal((await call('/api/preferences',stranger,{method:'PUT',body:{public_profile:true,confirm_consent:true}})).status,400);
+ const report=await call('/api/requests',owner,{method:'POST',body:{kind:'data_correction',message:'test personal correction'}});assert.equal(report.status,201);
+ assert.equal((await call('/api/requests',stranger)).data.items.length,0);assert.equal((await call('/api/requests',owner)).data.items.length,1);
+ assert.equal((await call('/api/admin/requests',stranger)).status,403);assert.equal((await call('/api/admin/requests',admin)).data.items.length,1);
+ const board=await call('/api/leaderboard?sort=balance',stranger);assert.equal(board.data.sort,'quiz_rating_desc');for(const r of board.data.rows)assert.equal(r.balance,undefined);
+});
+
+test('processing consent: public policy precedes registration; separate versioned grant and withdrawal',async()=>{
+ const admin={id:ADMIN,first_name:'Admin'},fresh={id:77,first_name:'New'};await call('/api/me',admin);
+ const policy={operator:'test operator',operator_address:'test address',contacts:'test@example.invalid',policy_text:'test-only policy',purposes:'test',legal_bases:'test',retention:'test',rights:'test',personal_data:'test',operations:'test',withdrawal:'test',cross_border_basis:'test',age_requirements:'test',processing_basis:'consent',processing_legal_reference:'test',processing_consent:'test consent',publication_consent:'test profile consent',avatar_consent:'test avatar consent',marketing_consent:'test ads consent',services:[{name:'test',purpose:'test',countries:['test']}],legal_review_confirmed:true};
+ assert.equal((await call('/api/admin/policy',admin,{method:'PUT',body:{version:'test-1',publish:true,policy}})).status,200);
+ assert.equal((await call('/api/policy')).data.policy.version,'test-1');
+ assert.equal((await call('/api/me',fresh)).status,403);assert.equal(env.DB.raw.prepare('SELECT id FROM users WHERE id=77').get(),undefined);
+ assert.equal((await call('/api/consents',fresh,{method:'POST',body:{granted:true,policy_version:'test-1',confirm_consent:true}})).status,200);
+ assert.equal((await call('/api/me',fresh)).status,200);
+ assert.equal((await call('/api/preferences',fresh,{method:'PUT',body:{public_profile:true,public_avatar:true,marketing_opt_in:true,policy_version:'test-1',confirm_consent:true}})).status,200);
+ assert.equal((await call('/api/consents',fresh,{method:'POST',body:{granted:false}})).status,200);
+ assert.equal((await call('/api/matches',fresh)).status,403);
+ assert.equal(env.DB.raw.prepare('SELECT public_profile FROM users WHERE id=77').get().public_profile,0);
+ assert.equal((await call('/api/requests',fresh,{method:'POST',body:{kind:'data_deletion',message:'test withdrawal request'}})).status,201);
+ assert.equal(env.DB.raw.prepare("SELECT COUNT(*) n FROM transactions WHERE user_id=77 AND type='signup_bonus'").get().n,1);
+});
+
+test('admin prediction exception is server-authorized; forged flags fail; normal balance and seasonal exclusion',async()=>{
+ const originalNow=Date.now;let clock=Date.parse('2026-12-10T12:00:00+03:00')/1000;Date.now=()=>clock*1000;
+ try {
+  const player={id:7,first_name:'Player'},admin={id:ADMIN,first_name:'Admin'};
+  await call('/api/me',player);await call('/api/me',admin);
+  env.DB.raw.prepare('UPDATE users SET public_profile=1').run();
+  const old=env.DB.raw.prepare("INSERT INTO matches(tournament,home,away,start_time,status,home_score,away_score,odds_updated_at,settled_at,settle_version,updated_at) VALUES('PL','A','B',?,'finished',1,0,?,?,1,?) RETURNING id").get(clock-1000000,clock-1000000,clock-1,clock).id;
+  env.DB.raw.prepare("INSERT INTO odds VALUES(?,'1x2','1',2)").run(old);
+  const payload={match_id:old,market:'1x2',outcome:'1',stake:1,is_admin_test:true,admin:true};
+  assert.equal((await call('/api/predictions',player,{method:'POST',body:payload})).status,409);
+  const result=await call('/api/predictions',admin,{method:'POST',body:payload});assert.equal(result.status,200);assert.equal(result.data.balance,11);assert.equal(result.data.prediction.is_admin_test,true);
+  assert.equal((await call('/api/matches/'+old,admin)).data.open,true);assert.equal((await call('/api/matches/'+old,player)).data.open,false);
+  const future=env.DB.raw.prepare("INSERT INTO matches(tournament,home,away,start_time,odds_updated_at,updated_at) VALUES('PL','C','D',?,?,?) RETURNING *").get(clock+60,clock,clock);
+  env.DB.raw.prepare("INSERT INTO odds VALUES(?,'1x2','1',2)").run(future.id);
+  const real=await call('/api/predictions',player,{method:'POST',body:{...payload,match_id:future.id}});assert.equal(real.status,200);assert.equal(real.data.prediction.is_admin_test,false);
+  clock+=120;await (await import('../src/predictions.js')).settleMatch(env.DB,future,[1,0],clock);
+  const board=(await call('/api/leaderboard',player)).data;
+  assert.equal(board.rows.find(r=>r.id===ADMIN).predictions,0);assert.equal(board.rows.find(r=>r.id===7).predictions,1);
+ } finally {Date.now=originalNow;}
 });

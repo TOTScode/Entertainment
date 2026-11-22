@@ -6,13 +6,37 @@ import { history } from "./leaderboard.js";
 import { toBist, toUnits } from "./money.js";
 import { correctionStatements } from "./predictions.js";
 import { dashboard } from "./dashboard.js";
-import { adminQuizzes, createQuiz, deleteQuiz, moveQuiz, QuizError, saveSettings, updateQuiz, uploadMedia } from "./quizzes.js";
+import {
+  adminQuizzes,
+  createQuiz,
+  deleteQuiz,
+  moveQuiz,
+  QuizError,
+  saveSettings,
+  updateQuiz,
+  uploadMedia,
+} from "./quizzes.js";
 
+import {
+  ensureCalendar,
+  saveFinalRules,
+  activateSeason,
+  configureSeasonPolicy,
+  SeasonError,
+  audit,
+} from "./seasons.js";
+import { finalScores, reviewFinal, publishTiebreak } from "./finals.js";
+import { validatePolicy } from "./privacy.js";
+import { voidQuestion, requireFrozenDecision, decideFinalist } from "./corrections.js";
 const MAX_ADJUSTMENT = 100000;
 
 export function adminIds(env) {
   return new Set(
-    String(env.ADMIN_IDS || "").split(",").map((s) => s.trim()).filter(Boolean).map(Number),
+    String(env.ADMIN_IDS || "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .map(Number),
   );
 }
 
@@ -22,9 +46,17 @@ async function writeAudit(db, { adminId, action, targetUserId, reason, before, a
   const result = await db
     .prepare(
       "INSERT INTO audit_log (admin_id, action, target_user_id, reason, before_data, after_data, created_at) " +
-      "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
     )
-    .bind(adminId, action, targetUserId, reason, JSON.stringify(before), JSON.stringify(after), Math.floor(Date.now() / 1000))
+    .bind(
+      adminId,
+      action,
+      targetUserId,
+      reason,
+      JSON.stringify(before),
+      JSON.stringify(after),
+      Math.floor(Date.now() / 1000),
+    )
     .run();
   return result.meta.last_row_id;
 }
@@ -39,6 +71,9 @@ const publicUser = (u) => ({
 
 export async function handleAdmin(request, env, admin, path, json) {
   const db = env.DB;
+  const ts = Math.floor(Date.now() / 1000);
+  const special = await complianceAdmin(request, env, admin, path, json, ts);
+  if (special) return special;
 
   if (path === "/api/admin/users" && request.method === "GET") {
     const q = new URL(request.url).searchParams.get("q") || "";
@@ -52,8 +87,16 @@ export async function handleAdmin(request, env, admin, path, json) {
     const reason = String(body.reason ?? "").trim();
     if (!reason) return json({ error: "Укажите причину" }, 400);
     // Можно с одним знаком после запятой: 2.5 BIST
-    if (!Number.isFinite(amount) || amount === 0 || Math.abs(amount) > MAX_ADJUSTMENT || !Number.isInteger(Math.round(amount * 1e6) / 1e5)) {
-      return json({ error: `Сумма — от 0.1 до ${MAX_ADJUSTMENT} по модулю, не больше одного знака после запятой` }, 400);
+    if (
+      !Number.isFinite(amount) ||
+      amount === 0 ||
+      Math.abs(amount) > MAX_ADJUSTMENT ||
+      !Number.isInteger(Math.round(amount * 1e6) / 1e5)
+    ) {
+      return json(
+        { error: `Сумма — от 0.1 до ${MAX_ADJUSTMENT} по модулю, не больше одного знака после запятой` },
+        400,
+      );
     }
     const target = await getUser(db, userId);
     if (!target) return json({ error: "Пользователь не найден" }, 404);
@@ -85,11 +128,14 @@ export async function handleAdmin(request, env, admin, path, json) {
     const away = Number(body.away);
     const reason = String(body.reason ?? "").trim();
     if (!reason) return json({ error: "Укажите причину" }, 400);
-    if (![home, away].every((n) => Number.isInteger(n) && n >= 0 && n <= 30)) return json({ error: "Неверный счёт" }, 400);
+    if (![home, away].every((n) => Number.isInteger(n) && n >= 0 && n <= 30))
+      return json({ error: "Неверный счёт" }, 400);
     const match = await db.prepare("SELECT * FROM matches WHERE id = ?").bind(Number(result[1])).first();
     if (!match) return json({ error: "Матч не найден" }, 404);
-    if (match.status !== "finished") return json({ error: "Исправить можно только счёт сыгранного матча" }, 409);
+    if (match.status !== "finished")
+      return json({ error: "Исправить можно только счёт сыгранного матча" }, 409);
     const now = Math.floor(Date.now() / 1000);
+    await requireFrozenDecision(db, body, now);
     await db.batch([
       ...correctionStatements(db, match, [home, away], now),
       db
@@ -97,8 +143,13 @@ export async function handleAdmin(request, env, admin, path, json) {
           "INSERT INTO audit_log (admin_id, action, target_user_id, reason, before_data, after_data, created_at) VALUES (?, 'match_result', NULL, ?, ?, ?, ?)",
         )
         .bind(
-          admin.id, reason,
-          JSON.stringify({ match_id: match.id, match: `${match.home} — ${match.away}`, score: [match.home_score, match.away_score] }),
+          admin.id,
+          reason,
+          JSON.stringify({
+            match_id: match.id,
+            match: `${match.home} — ${match.away}`,
+            score: [match.home_score, match.away_score],
+          }),
           JSON.stringify({ match_id: match.id, match: `${match.home} — ${match.away}`, score: [home, away] }),
           now,
         ),
@@ -106,7 +157,8 @@ export async function handleAdmin(request, env, admin, path, json) {
     return json({ ok: true });
   }
 
-  if (path === "/api/admin/dashboard" && request.method === "GET") return json(await dashboard(db, Math.floor(Date.now() / 1000)));
+  if (path === "/api/admin/dashboard" && request.method === "GET")
+    return json(await dashboard(db, Math.floor(Date.now() / 1000)));
 
   // --- викторины ---
   if (path.startsWith("/api/admin/quiz") || path === "/api/admin/media") {
@@ -118,10 +170,13 @@ export async function handleAdmin(request, env, admin, path, json) {
         return json({ id, ...(await adminQuizzes(db, now)) });
       }
       const one = /^\/api\/admin\/quizzes\/(\d+)(?:\/(move))?$/.exec(path);
-      if (one && request.method === "PUT" && !one[2]) await updateQuiz(db, Number(one[1]), await request.json().catch(() => ({})), now);
+      if (one && request.method === "PUT" && !one[2])
+        await updateQuiz(db, Number(one[1]), await request.json().catch(() => ({})), now);
       else if (one && request.method === "DELETE" && !one[2]) await deleteQuiz(db, Number(one[1]), now);
-      else if (one && request.method === "POST" && one[2]) await moveQuiz(db, Number(one[1]), (await request.json().catch(() => ({}))).dir, now);
-      else if (path === "/api/admin/quiz-settings" && request.method === "POST") await saveSettings(db, await request.json().catch(() => ({})), now);
+      else if (one && request.method === "POST" && one[2])
+        await moveQuiz(db, Number(one[1]), (await request.json().catch(() => ({}))).dir, now);
+      else if (path === "/api/admin/quiz-settings" && request.method === "POST")
+        await saveSettings(db, await request.json().catch(() => ({})), now);
       else if (path === "/api/admin/media" && request.method === "POST") {
         const form = await request.formData().catch(() => null);
         return json(await uploadMedia(db, (env.BOT_TOKEN || "").trim(), admin.id, form?.get("file"), now));
@@ -143,7 +198,7 @@ export async function handleAdmin(request, env, admin, path, json) {
     const rows = await db
       .prepare(
         "SELECT a.*, u.username, u.first_name, u.last_name, u.nickname FROM audit_log a " +
-        "LEFT JOIN users u ON u.id = a.target_user_id ORDER BY a.id DESC LIMIT 50",
+          "LEFT JOIN users u ON u.id = a.target_user_id ORDER BY a.id DESC LIMIT 50",
       )
       .all();
     return json({
@@ -164,3 +219,107 @@ export async function handleAdmin(request, env, admin, path, json) {
   return json({ error: "Не найдено" }, 404);
 }
 
+async function complianceAdmin(request, env, admin, path, json, now) {
+  const db = env.DB;
+  const body =
+    request.method === "GET"
+      ? {}
+      : await request
+          .clone()
+          .json()
+          .catch(() => ({}));
+  const final = /^\/api\/admin\/finals\/([a-z0-9-]+)\/(scores|review|tiebreak|submissions)$/.exec(path);
+  if (final) {
+    if (final[2] === "scores" && request.method === "GET") return json(await finalScores(db, final[1], now));
+    if (final[2] === "review" && request.method === "POST")
+      return json(await reviewFinal(db, final[1], body, admin.id, now));
+    if (final[2] === "tiebreak" && request.method === "POST")
+      return json(await publishTiebreak(db, final[1], body, admin.id, now));
+    if (final[2] === "submissions" && request.method === "GET")
+      return json({
+        items: (
+          await db
+            .prepare("SELECT * FROM final_submissions WHERE season_id=? ORDER BY user_id,round")
+            .bind(final[1])
+            .all()
+        ).results,
+      });
+  }
+  if (path === "/api/admin/seasons" && request.method === "GET") {
+    await ensureCalendar(db, now);
+    return json({
+      items: (
+        await db
+          .prepare(
+            "SELECT s.*,r.body AS rules,r.published_at,r.frozen_at FROM seasons s LEFT JOIN final_rules r ON r.season_id=s.id WHERE s.starts_at>=1796072400 ORDER BY starts_at DESC",
+          )
+          .all()
+      ).results,
+    });
+  }
+  if (path === "/api/admin/seasons/policy" && request.method === "POST")
+    return json(await configureSeasonPolicy(db, body, admin.id, now));
+  if (path === "/api/admin/seasons/activate" && request.method === "POST")
+    return json(await activateSeason(db, body, admin.id, now));
+  const rules = /^\/api\/admin\/seasons\/([a-z0-9-]+)\/rules$/.exec(path);
+  if (rules && request.method === "PUT") {
+    await saveFinalRules(db, rules[1], body.rules || {}, admin.id, now, { publish: body.publish === true });
+    return json({ ok: true });
+  }
+  const admission = /^\/api\/admin\/seasons\/([a-z0-9-]+)\/admission$/.exec(path);
+  if (admission && request.method === "POST")
+    return json(await decideFinalist(db, admission[1], body, admin.id, now));
+  const question = /^\/api\/admin\/questions\/(\d+)\/void$/.exec(path);
+  if (question && request.method === "POST")
+    return json(await voidQuestion(db, Number(question[1]), body, admin.id, now));
+  if (path === "/api/admin/policy" && request.method === "PUT") {
+    if (!/^[a-zA-Z0-9._-]{1,60}$/.test(body.version || ""))
+      throw new SeasonError("Укажите версию политики", 400);
+    if (body.publish) validatePolicy(body.policy || {});
+    const old = await db
+      .prepare("SELECT published_at FROM policy_documents WHERE version=?")
+      .bind(body.version)
+      .first();
+    if (old?.published_at) throw new SeasonError("Опубликованную версию нельзя менять");
+    await db
+      .prepare(
+        "INSERT INTO policy_documents(version,body,published_at,published_by) VALUES(?,?,?,?) ON CONFLICT(version) DO UPDATE SET body=excluded.body,published_at=excluded.published_at,published_by=excluded.published_by",
+      )
+      .bind(
+        body.version,
+        JSON.stringify(body.policy || {}),
+        body.publish ? now : null,
+        body.publish ? admin.id : null,
+      )
+      .run();
+    return json({ ok: true });
+  }
+  if (path === "/api/admin/requests" && request.method === "GET")
+    return json({
+      items: (await db.prepare("SELECT * FROM user_requests ORDER BY id DESC LIMIT 100").all()).results,
+    });
+  const req = /^\/api\/admin\/requests\/(\d+)$/.exec(path);
+  if (req && request.method === "PUT") {
+    if (
+      !["open", "in_review", "resolved", "rejected"].includes(body.status) ||
+      !String(body.resolution || "").trim()
+    )
+      throw new SeasonError("Укажите статус и мотивированный ответ", 400);
+    await db.batch([
+      db
+        .prepare("UPDATE user_requests SET status=?,resolution=?,resolved_by=?,resolved_at=? WHERE id=?")
+        .bind(body.status, body.resolution, admin.id, now, Number(req[1])),
+      db
+        .prepare("INSERT INTO audit_log(admin_id,action,reason,after_data,created_at) VALUES(?,?,?,?,?)")
+        .bind(
+          admin.id,
+          "request_resolution",
+          body.resolution,
+          JSON.stringify({ id: Number(req[1]), status: body.status }),
+          now,
+        ),
+    ]);
+    return json({ ok: true });
+  }
+  return null;
+}
