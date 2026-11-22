@@ -49,3 +49,14 @@ body.dialog-open{overflow:hidden}.brow .who:hover{text-decoration:underline;text
 .table-hint{margin:12px 0 0}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}.qualify-head{align-items:flex-start;flex-wrap:wrap}.request-symbol{display:inline-flex;width:44px;height:44px;flex-shrink:0;align-items:center;justify-content:center;border-radius:12px;background:var(--soft);background:color-mix(in srgb,var(--bad) 10%,var(--card));color:var(--bad)}.request-symbol svg{width:30px;height:30px}#request-panel>summary{justify-content:flex-start;gap:12px;font-size:15px}#request-panel>summary>span:last-child{flex:1}#request-panel{border:1px solid var(--input-line)}.about-app{margin-top:24px}.about-app .disclosure{margin-top:16px}.question,.final-task{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}.question input,.question textarea,.final-task input,.final-task textarea{-webkit-user-select:text;user-select:text}.tasks-obscured .question,.tasks-obscured .final-task{visibility:hidden}@media print{.question,.final-task{visibility:hidden}}@media(min-width:680px){.table-hint{display:none}}
 
 .participant-identity{flex:1;min-width:0}.participant-identity>span:first-child{display:block;overflow-wrap:anywhere}@media(max-width:600px){.rating-table .name-cell{position:static;box-shadow:none}}
+
+.match-time{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:8px;text-align:right;font-variant-numeric:tabular-nums}.live-tag{display:inline-flex;align-items:center;gap:4px;padding:3px 6px;border-radius:5px;background:var(--soft);color:var(--accent);font-size:9px;font-weight:700;line-height:1;letter-spacing:.04em}.live-tag:before{content:"";width:4px;height:4px;border-radius:50%;background:currentColor}.pred-item .live-tag{margin-left:8px;vertical-align:middle}
+
+
+
+:root{--live:#bf2639}[data-theme="dark"]{--live:#ff7888}
+.live-tag{color:var(--live);background:color-mix(in srgb,var(--live) 11%,var(--card))}
+.ui-icon{display:inline-block;width:19px;height:19px;margin-right:5px;vertical-align:-4px;flex-shrink:0}
+.icon-success{color:var(--accent)}.icon-error{color:var(--bad)}
+.icon-btn .ui-icon{margin:0;vertical-align:middle;width:18px;height:18px}
+.q-timer .ui-icon{width:15px;height:15px;vertical-align:-3px}

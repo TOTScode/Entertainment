@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 import { UNIT } from "../src/money.js";
 import {
-  cancelMatch, cancelPrediction, correctionStatements, getMatch, listMatches, payoutUnits, placePrediction, settleMatch,
+  matchIsLive, myPredictions, cancelMatch, cancelPrediction, correctionStatements, getMatch, listMatches, payoutUnits, placePrediction, settleMatch,
 } from "../src/predictions.js";
 import { saveOdds, sync } from "../src/sync.js";
 import { opOdds } from "../src/providers.js";
@@ -230,4 +230,29 @@ test("история показывает матч и исход для опер
   const h = await history(db, 1);
   assert.deepEqual([h.items[0].type, h.items[0].amount, h.items[0].match, h.items[0].outcome], ["bet", -4, "Chelsea — Manchester United", "2:1"]);
   assert.equal(h.items[1].match, null);
+});
+
+
+test("LIVE lasts exactly 105 minutes; completed, cancelled and postponed matches are not live", () => {
+  const m = {start_time: NOW, status: "scheduled"};
+  assert.equal(matchIsLive(m, NOW-1), false);
+  assert.equal(matchIsLive(m, NOW), true);
+  assert.equal(matchIsLive(m, NOW+6299), true);
+  assert.equal(matchIsLive(m, NOW+6300), false);
+  for (const status of ["finished","cancelled","postponed"])
+    assert.equal(matchIsLive({...m,status}, NOW+100), false);
+});
+
+test("kickoff closes player forecasts while active forecasts survive LIVE and await settlement", async () => {
+  const id = await addMatch({start:NOW+1});
+  await placePrediction(db,1,{match_id:id,market:"1x2",outcome:"1",stake:10},NOW);
+  for (const time of [NOW+1,NOW+6300,NOW+6301]) {
+    await assert.rejects(placePrediction(db,2,{match_id:id,market:"1x2",outcome:"1",stake:1},time),/закрыт/);
+    assert.equal((await getMatch(db,1,id,time)).open,false);
+    const rows = await myPredictions(db,1,{now:time});
+    assert.equal(rows.items.length,1);
+    assert.equal(rows.items[0].status,"active");
+    assert.equal(rows.items[0].match.live,time<NOW+6301);
+  }
+  assert.equal((await getMatch(db,1,id,NOW+1,{admin:true})).open,true);
 });

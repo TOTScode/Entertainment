@@ -59,6 +59,10 @@ function publicPrediction(p, now, admin = false) {
   };
 }
 
+export function matchIsLive(m, now) {
+  return now >= m.start_time && now < m.start_time + 105 * 60 && !["finished", "cancelled", "postponed"].includes(m.status);
+}
+
 function publicMatch(m, now, admin = false) {
   return {
     id: m.id,
@@ -67,6 +71,7 @@ function publicMatch(m, now, admin = false) {
     home: m.home,
     away: m.away,
     start_time: m.start_time,
+    live: matchIsLive(m, now),
     status: m.status,
     score: m.home_score == null ? null : [m.home_score, m.away_score],
     open: admin || isOpen(m, now),

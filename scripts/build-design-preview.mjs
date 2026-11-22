@@ -10,7 +10,7 @@ html = html.replace("<body>", `<body>
 <aside class="preview-tools" aria-label="Настройки демонстрации">
   <strong>Новый дизайн TOTS</strong><p>Рабочие компоненты · вымышленные данные · без настоящих операций</p>
   <div><label>Тема<select id="preview-theme"><option value="light">Светлая</option><option value="dark">Тёмная</option></select></label>
-  <label>Состояние<select id="preview-state"><option value="normal">Обычное</option><option value="sample">Пример таблицы</option><option value="empty">Нет данных</option><option value="error">Ошибка сети</option><option value="loading">Загрузка</option></select></label>
+  <label>Состояние<select id="preview-state"><option value="normal">Обычное</option><option value="sample">Пример таблицы</option><option value="live">Матч LIVE</option><option value="empty">Нет данных</option><option value="error">Ошибка сети</option><option value="loading">Загрузка</option></select></label>
   <label>Роль<select id="preview-role"><option value="player">Игрок</option><option value="admin">Администратор</option></select></label></div>
 </aside>
 <style>.preview-tools{max-width:640px;margin:20px auto 0;border-bottom:1px solid var(--line);padding:0 0 20px}.preview-tools strong{font-size:14px}.preview-tools p{font-size:12px;color:var(--hint);margin:6px 0 12px}.preview-tools>div{display:flex;gap:12px;flex-wrap:wrap}.preview-tools label{font-size:12px;color:var(--hint);display:grid;gap:4px;flex:1;min-width:120px}.preview-tools select{width:100%;min-height:44px;background:var(--card);color:var(--text);border:1px solid var(--input-line);border-radius:8px;padding:8px;font:inherit}</style>`);

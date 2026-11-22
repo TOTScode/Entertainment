@@ -597,7 +597,25 @@ function payoutOf(stake, price) {
 }
 
 function kickoff(ts) {
-  return new Date(ts * 1000).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+  return new Date(ts * 1000).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Minsk" });
+}
+
+function matchDateTime(ts) {
+  const date = new Date(ts * 1000).toLocaleDateString("ru-RU", {day:"2-digit",month:"2-digit",year:"numeric",timeZone:"Europe/Minsk"});
+  return `${date} · ${kickoff(ts)}`;
+}
+function matchIsLive(m) {
+  const elapsed = serverNow() - m.start_time;
+  return elapsed >= 0 && elapsed < 105 * 60 && !["finished", "cancelled", "postponed"].includes(m.status);
+}
+function matchAcceptsPrediction(m) {
+  return m.open && (m.admin_mode || m.start_time > serverNow());
+}
+function liveTag() {
+  const tag = document.createElement("span");
+  tag.className = "live-tag";
+  tag.textContent = "LIVE";
+  return tag;
 }
 
 function dayLabel(ts) {
@@ -612,20 +630,49 @@ function dayLabel(ts) {
 
 // Почему прогноз сейчас не принимается
 function closedNote(m) {
-  if(seasonInfo?.season.pending_start)return "Приём прогнозов начнётся 1 декабря 2026 года";
   if (m.status === "finished") return null;
   if (m.status === "cancelled") return "Матч отменён, прогнозы возвращены";
   if (m.status === "postponed") return "Матч перенесён, приём прогнозов закрыт";
-  if (m.start_time <= serverNow()) return "Матч идёт, ждём результат";
+  if (m.start_time <= serverNow()) return matchIsLive(m) ? "Матч идёт · приём прогнозов закрыт" : "Приём закрыт · ждём результат";
+  if(seasonInfo?.season.pending_start)return "Приём прогнозов начнётся 1 декабря 2026 года";
   return "Приём прогнозов закрыт: нет свежих данных по матчу";
+}
+
+const ICON_PATHS = {
+  success: '<circle cx="10" cy="10" r="9" fill="currentColor" fill-opacity=".10" stroke="none"/><path d="m6 10 2.6 2.6L14 7.2"/>',
+  error: '<circle cx="10" cy="10" r="8"/><path d="m7 7 6 6m0-6-6 6"/>',
+  refund: '<path d="M6 6H3V3m0 3a7 7 0 1 1 0 8"/>',
+  target: '<circle cx="10" cy="10" r="7.5"/><circle cx="10" cy="10" r="4"/><circle cx="10" cy="10" r=".8" fill="currentColor" stroke="none"/>',
+  clock: '<circle cx="10" cy="10" r="7.5"/><path d="M10 5.5V10l3 2"/>',
+  file: '<path d="m7 10 5-5a3 3 0 0 1 4 4l-7 7a4 4 0 0 1-6-6l7-7m-5 9 7-7"/>',
+  link: '<path d="m8 12 4-4m-6 3-2 2a3 3 0 0 0 4 4l3-3m-2-8 3-3a3 3 0 0 1 4 4l-2 2"/>',
+  edit: '<path d="m4 12 9-9 4 4-9 9-5 1 1-5Zm7-7 4 4"/>',
+  trash: '<path d="M3 5h14M7 5V3h6v2M5 5l1 12h8l1-12M8 8v6m4-6v6"/>',
+  spark: '<path d="m10 2 2 6 6 2-6 2-2 6-2-6-6-2 6-2 2-6Z"/>',
+  up: '<path d="M10 16V4m-5 5 5-5 5 5"/>',
+  down: '<path d="M10 4v12m-5-5 5 5 5-5"/>'
+};
+function uiIcon(kind) {
+  return `<svg class="ui-icon icon-${kind}" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${ICON_PATHS[kind] || ICON_PATHS.spark}</svg>`;
+}
+const SUCCESS_ICON = uiIcon("success");
+function iconText(element, text, kind) {
+  element.innerHTML = uiIcon(kind);
+  element.append(text);
+}
+
+function renderPredictionLine(element, prediction, prefix = "") {
+  element.replaceChildren();
+  element.insertAdjacentHTML("beforeend", uiIcon({won:"success",lost:"error",refunded:"refund"}[prediction.status] || "target"));
+  element.append(prefix + predLine(prediction));
 }
 
 function predLine(p) {
   const what = `${p.is_admin_test ? "Админ · вне сезонной статистики · " : ""}${outcomeLabel(p.market, p.outcome)} · ${fmt(p.stake)} BIST · вес ${p.price.toFixed(2)}`;
-  if (p.status === "won") return `✅ ${what} · выигрыш ${fmt(p.payout)}`;
-  if (p.status === "lost") return `❌ ${what} · не сыграл`;
-  if (p.status === "refunded") return `↩️ ${what} · возврат`;
-  return `🎯 ${what} · возможная выплата ${fmt(p.payout)}`;
+  if (p.status === "won") return `${what} · выигрыш ${fmt(p.payout)}`;
+  if (p.status === "lost") return `${what} · не сыграл`;
+  if (p.status === "refunded") return `${what} · возврат`;
+  return `${what} · возможная выплата ${fmt(p.payout)}`;
 }
 
 function matchCard(m) {
@@ -635,7 +682,10 @@ function matchCard(m) {
   top.className = "match-top";
   top.innerHTML = "<span></span><span></span>";
   top.children[0].textContent = m.tournament_name;
-  top.children[1].textContent = m.status === "finished" ? "Завершён" : kickoff(m.start_time);
+  top.children[1].className = "match-time";
+  top.children[1].textContent = matchDateTime(m.start_time);
+  const live = liveTag();
+  top.children[1].append(live);
   const teams = document.createElement("button");
   teams.className = "match-teams";
   teams.innerHTML = "<span></span>";
@@ -662,7 +712,7 @@ function matchCard(m) {
       b.innerHTML = "<small></small><span></span>";
       b.firstChild.textContent = outcomeLabel("1x2", o);
       b.lastChild.textContent = m.odds[o].toFixed(2);
-      b.disabled = !m.open;
+      b.disabled = !matchAcceptsPrediction(m);
       b.onclick = () => openBet(m, "1x2", o);
       odds.appendChild(b);
     }
@@ -671,27 +721,28 @@ function matchCard(m) {
       b.className = "odd more";
       if (m.my.some((p) => p.market === "score")) b.classList.add("mine");
       b.innerHTML = "<small>Точный</small><span>счёт</span>";
-      b.disabled = !m.open;
+      b.disabled = !matchAcceptsPrediction(m);
       b.onclick = () => openBet(m, "score");
       odds.appendChild(b);
     }
     card.appendChild(odds);
   }
-  if (!m.open) {
-    const note = closedNote(m);
-    if (note) {
-      const el = document.createElement("div");
-      el.className = "match-note";
-      el.textContent = note;
-      card.appendChild(el);
-    }
-  }
+  const timingNote = document.createElement("div");
+  timingNote.className = "match-note";
+  card.append(timingNote);
   for (const p of m.my) {
     const el = document.createElement("div");
     el.className = "my-pred";
-    el.textContent = predLine(p);
+    renderPredictionLine(el, p);
     card.appendChild(el);
   }
+  card.updateTiming = () => {
+    timingNote.textContent = matchAcceptsPrediction(m) ? "" : (closedNote(m) || "");
+    timingNote.classList.toggle("hidden", !timingNote.textContent);
+    live.classList.toggle("hidden", !matchIsLive(m) || !m.my.some(p => p.status === "active"));
+    card.querySelectorAll(".odd").forEach(button => { button.disabled = !matchAcceptsPrediction(m); });
+  };
+  card.updateTiming();
   return card;
 }
 
@@ -772,12 +823,15 @@ async function loadMine(reset = false) {
       label.textContent = `${p.match.home} — ${p.match.away}`;
       const sub = document.createElement("span");
       sub.className = "hist-sub";
-      sub.textContent = predLine(p);
+      renderPredictionLine(sub, p);
       const when = document.createElement("span");
       when.className = "when";
-      when.textContent = `${p.match.tournament_name} · ${dayLabel(p.match.start_time)}, ${kickoff(p.match.start_time)}` +
+      when.textContent = `${p.match.tournament_name} · ${matchDateTime(p.match.start_time)}` +
         (p.match.score ? ` · ${p.match.score.join(":")}` : "");
-      label.append(sub, when);
+      const live = liveTag();
+      label.append(live, sub, when);
+      li.updateTiming = () => live.classList.toggle("hidden", p.status !== "active" || !matchIsLive(p.match));
+      li.updateTiming();
       li.appendChild(label);
       li.onclick = () => openBet({ ...p.match, my: [] }, p.market);
       list.appendChild(li);
@@ -836,7 +890,7 @@ function renderBet() {
   const m = bet.match;
   $("bet-timing-rules").textContent = m.admin_mode ? "Один действующий прогноз на матч. Для администратора нет ограничений по времени и ожидания между изменениями. Обычный баланс, без учёта в сезонной статистике." : "Один прогноз на матч. Приём до начала матча. Замена или отмена — не чаще раза в 5 минут.";
   $("bet-title").textContent = `${m.home} — ${m.away}`;
-  $("bet-sub").textContent = `${m.tournament_name} · ${dayLabel(m.start_time)}, ${kickoff(m.start_time)}`;
+  $("bet-sub").textContent = `${m.tournament_name} · ${matchDateTime(m.start_time)}`;
   const state = $("bet-state");
   const note = m.score ? `Итог основного времени: ${m.score.join(" : ")}` : m.open ? null : closedNote(m);
   state.textContent = [note,m.admin_mode ? "Режим администратора: обычный баланс, прогноз не входит в сезонную статистику." : null].filter(Boolean).join(" · ");
@@ -864,7 +918,7 @@ function renderBet() {
     b.innerHTML = "<small></small><span></span>";
     b.firstChild.textContent = bet.market === "1x2" ? outcomeLabel("1x2", o) : o;
     b.lastChild.textContent = odds[o].toFixed(2);
-    b.disabled = !m.open;
+    b.disabled = !matchAcceptsPrediction(m);
     b.onclick = () => { bet.outcome = o; renderBet(); };
     box.appendChild(b);
   }
@@ -873,15 +927,22 @@ function renderBet() {
   const current = activeOf(m);
   const settled = m.my.filter((p) => p.status !== "active");
   const cur = $("bet-current");
-  const lines = [...(current ? [`Ваш прогноз: ${predLine(current)}`] : []), ...settled.map(predLine)];
-  // На матч — один прогноз: новый прогноз на другой рынок заменит текущий
-  if (current && m.open && current.market !== bet.market) lines.push("На матч можно сделать один прогноз: новый заменит текущий.");
-  cur.textContent = lines.join("\n");
-  cur.style.whiteSpace = "pre-line";
-  cur.classList.toggle("hidden", !lines.length);
+  cur.replaceChildren();
+  for (const p of [...(current ? [current] : []), ...settled]) {
+    const line = document.createElement("div");
+    renderPredictionLine(line, p, p === current ? "Ваш прогноз: " : "");
+    cur.append(line);
+  }
+  // На матч — один прогноз: новый прогноз на другой рынок заменит текущий.
+  if (current && matchAcceptsPrediction(m) && current.market !== bet.market) {
+    const note = document.createElement("div");
+    note.textContent = "На матч можно сделать один прогноз: новый заменит текущий.";
+    cur.append(note);
+  }
+  cur.classList.toggle("hidden", !cur.childNodes.length);
 
-  $("bet-form").classList.toggle("hidden", !m.open || !bet.outcome);
-  $("bet-cancel").classList.toggle("hidden", !m.open || !current);
+  $("bet-form").classList.toggle("hidden", !matchAcceptsPrediction(m) || !bet.outcome);
+  $("bet-cancel").classList.toggle("hidden", !matchAcceptsPrediction(m) || !current);
   $("bet-submit").textContent = current ? "Заменить прогноз" : "Сделать прогноз";
   updatePayout();
   tickCooldown();
@@ -920,7 +981,7 @@ function updatePayout() {
   const price = bet.match.odds[bet.market]?.[bet.outcome];
   const stake = Number($("bet-stake").value);
   $("bet-submit").disabled = !Number.isInteger(stake) || stake < STAKE_MIN || stake > STAKE_MAX ||
-    stake > me.balance + (activeOf(bet.match)?.stake || 0) || (activeOf(bet.match)?.next_change_at || 0) > serverNow();
+    stake > me.balance + (activeOf(bet.match)?.stake || 0) || !matchAcceptsPrediction(bet.match) || (activeOf(bet.match)?.next_change_at || 0) > serverNow();
   const el = $("bet-payout");
   if (!price) { el.textContent = ""; return; }
   if (!Number.isInteger(stake) || stake < STAKE_MIN || stake > STAKE_MAX) {
@@ -947,7 +1008,7 @@ function tickCooldown() {
     cancel.disabled = false;
     const stake = Number($("bet-stake").value);
     submit.disabled = !bet?.outcome || !Number.isInteger(stake) || stake < STAKE_MIN || stake > STAKE_MAX ||
-      stake > me.balance + (current?.stake || 0);
+      stake > me.balance + (current?.stake || 0) || !matchAcceptsPrediction(bet.match);
     submit.textContent = current ? "Заменить прогноз" : "Сделать прогноз";
     cancel.textContent = "Отменить прогноз";
   }
@@ -967,6 +1028,10 @@ async function afterBetChange(balance) {
 }
 
 async function submitBet() {
+  if (!bet || !matchAcceptsPrediction(bet.match)) {
+    showMsg($("bet-msg"), "Приём прогнозов на этот матч закрыт", false);
+    return;
+  }
   const btn = $("bet-submit");
   btn.disabled = true;
   try {
@@ -1098,7 +1163,7 @@ function mediaEl(media) {
     el = document.createElement("a");
     el.target = "_blank";
     el.rel = "noopener";
-    el.textContent = `📎 ${media.name || "Открыть файл"}`;
+    iconText(el, media.name || "Открыть файл", "file");
     el.href = media.url;
   }
   if (el.tagName !== "A") el.src = media.url;
@@ -1133,9 +1198,9 @@ function questionEl(q, i, live) {
   }
   const result = document.createElement("div");
   result.className = "q-result";
-  if (q.correct) result.innerHTML = `<span class="plus">✅ Верно</span>`;
-  else if (q.done && q.answer) result.innerHTML = `<span class="minus">❌ Неверно</span>`;
-  else if (q.done) result.innerHTML = `<span class="minus">⌛ Время вышло</span>`;
+  if (q.correct) result.innerHTML = `<span class="plus">${SUCCESS_ICON} Верно</span>`;
+  else if (q.done && q.answer) result.innerHTML = `<span class="minus">${uiIcon("error")} Неверно</span>`;
+  else if (q.done) result.innerHTML = `<span class="minus">${uiIcon("clock")} Время вышло</span>`;
   if (q.answer) result.append(` · ваш ответ: «${q.answer}»`);
   if (q.answers) {
     const right = document.createElement("div");
@@ -1242,7 +1307,7 @@ function tickQuiz() {
   let expired = false;
   document.querySelectorAll("#quiz-current .q-timer").forEach((el) => {
     const s = Math.ceil(Number(el.dataset.deadline) - serverNow());
-    el.textContent = s > 0 ? `⏱ ${s} сек` : "⏱ 0 сек";
+    iconText(el, `${Math.max(0,s)} сек`, "clock");
     if (s <= -5) expired = true;
   });
   if (expired || (quiz?.current && quiz.current.ends_at <= serverNow())) {
@@ -1356,18 +1421,19 @@ async function loadQuizAdmin(data) {
     const btn = (label, title, fn) => {
       const b = document.createElement("button");
       b.className = "icon-btn";
-      b.textContent = label;
+      b.innerHTML = uiIcon(label);
       b.title = title;
+      b.setAttribute("aria-label", title);
       b.onclick = fn;
       actions.appendChild(b);
     };
     if (z.status === "queued") {
-      btn("↑", "Раньше", () => quizAdminCall(`/api/admin/quizzes/${z.id}/move`, "POST", { dir: "up" }));
-      btn("↓", "Позже", () => quizAdminCall(`/api/admin/quizzes/${z.id}/move`, "POST", { dir: "down" }));
+      btn("up", "Раньше", () => quizAdminCall(`/api/admin/quizzes/${z.id}/move`, "POST", { dir: "up" }));
+      btn("down", "Позже", () => quizAdminCall(`/api/admin/quizzes/${z.id}/move`, "POST", { dir: "down" }));
     }
-    btn("🔗", "Скопировать ссылку для поста", () => copyQuizLink(z.id));
-    btn("✏️", "Изменить", () => editQuiz(z));
-    btn("🗑", z.status === "current" ? "Снять (следующая начнётся сразу)" : "Удалить", () => {
+    btn("link", "Скопировать ссылку для поста", () => copyQuizLink(z.id));
+    btn("edit", "Изменить", () => editQuiz(z));
+    btn("trash", z.status === "current" ? "Снять (следующая начнётся сразу)" : "Удалить", () => {
       const q = z.status === "current"
         ? `Снять «${z.title}»? Следующая викторина начнётся сразу.`
         : `Удалить «${z.title}» из очереди?`;
@@ -1417,10 +1483,10 @@ function questionForm(q = {}) {
   const name = box.querySelector(".qa-file-name");
   const del = box.querySelector(".qa-file-del");
   const setFile = (label) => {
-    name.textContent = label || "";
+    if (label) iconText(name, label, "file"); else name.replaceChildren();
     del.classList.toggle("hidden", !box.dataset.media);
   };
-  setFile(q.media ? `📎 ${q.media.name || q.media.kind}` : "");
+  setFile(q.media ? `${q.media.name || q.media.kind}` : "");
   box.querySelector(".qa-del").onclick = () => { box.remove(); numberQuestions(); };
   del.onclick = () => { box.dataset.media = ""; box.querySelector("input[type=file]").value = ""; setFile(""); };
   box.querySelector("input[type=file]").onchange = async (e) => {
@@ -1436,7 +1502,7 @@ function questionForm(q = {}) {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Не удалось загрузить файл");
       box.dataset.media = data.id;
-      setFile(`📎 ${file.name}`);
+      setFile(`${file.name}`);
     } catch (err) {
       box.dataset.media = "";
       setFile(err.message);
@@ -1555,7 +1621,7 @@ async function init() {
   }
   renderProfile();
   if (me.is_new) {
-    $("welcome").textContent = `🎉 Добро пожаловать! Вам начислено ${fmt(me.balance)} BIST.`;
+    iconText($("welcome"), `Добро пожаловать! Вам начислено ${fmt(me.balance)} BIST.`, "spark");
     $("welcome").classList.remove("hidden");
     tg.HapticFeedback?.notificationOccurred("success");
   }
@@ -1994,3 +2060,17 @@ document.addEventListener("keydown", (event) => {
 });
 
 init();
+
+// Keep kickoff controls and LIVE labels current even when a screen stays open.
+setInterval(() => {
+  if (document.hidden) return;
+  document.querySelectorAll("#match-list .match, #mine-list .pred-item").forEach(node => node.updateTiming?.());
+  if (bet && !bet.loading) {
+    const open = matchAcceptsPrediction(bet.match);
+    $("bet-form").classList.toggle("hidden", !open || !bet.outcome);
+    $("bet-cancel").classList.toggle("hidden", !open || !activeOf(bet.match));
+    document.querySelectorAll("#bet-outcomes .odd").forEach(button => { button.disabled = !open; });
+    if (!open) { $("bet-state").textContent = closedNote(bet.match); $("bet-state").classList.remove("hidden"); }
+    updatePayout();
+  }
+}, 1000);
