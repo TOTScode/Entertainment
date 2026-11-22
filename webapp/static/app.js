@@ -2114,6 +2114,24 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
+// A hover tooltip also opens by focus or tap for keyboard and touch users.
+const bistHelpAnchor = $("bist-help-anchor");
+const bistHelpButton = $("bist-help-button");
+const bistHelpPopup = $("bist-help-popup");
+let bistHelpPinned = false;
+const closeBistHelp = () => { bistHelpPinned = false; bistHelpPopup.hidden = true; };
+bistHelpAnchor.addEventListener("mouseenter", () => { bistHelpPopup.hidden = false; });
+bistHelpAnchor.addEventListener("mouseleave", () => { if (!bistHelpPinned) bistHelpPopup.hidden = true; });
+bistHelpButton.addEventListener("focus", () => { bistHelpPopup.hidden = false; });
+bistHelpButton.addEventListener("blur", closeBistHelp);
+bistHelpButton.addEventListener("click", () => {
+  bistHelpPinned = !bistHelpPinned;
+  bistHelpPopup.hidden = !bistHelpPinned;
+});
+document.addEventListener("pointerdown", (event) => { if (!bistHelpAnchor.contains(event.target)) closeBistHelp(); });
+document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeBistHelp(); });
+$("nav").addEventListener("click", closeBistHelp);
+
 init();
 
 // Keep kickoff controls and LIVE labels current even when a screen stays open.

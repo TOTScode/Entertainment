@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#101712">
   <title>TOTS · новый дизайн · демонстрация</title>
   <script src="preview-fixtures.js?v=db24f0db49"></script>
-  <link rel="stylesheet" href="../webapp/static/style.css?v=19dbaa9085">
+  <link rel="stylesheet" href="../webapp/static/style.css?v=d22c1bd3c8">
 </head>
 <body>
 <aside class="preview-tools" aria-label="Настройки демонстрации">
@@ -122,7 +122,7 @@
           <div><div class="muted">Получено</div><b id="stat-earned" class="plus">—</b></div>
           <div><div class="muted">Потрачено</div><b id="stat-spent" class="minus">—</b></div>
         </div>
-        <details class="disclosure help-block"><summary>О Bist</summary><p class="muted small">Bist нельзя купить, продать, передать, вывести или обменять на деньги, товары и сертификаты. Их можно получить только с помощью своих знаний.</p></details>
+        <div class="bist-help"><span>BIST</span><div id="bist-help-anchor" class="bist-help-anchor"><button id="bist-help-button" class="bist-help-button" type="button" aria-label="Что такое BIST" aria-describedby="bist-help-popup"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="10" cy="10" r="7.5"/><path d="M8 7.5a2 2 0 0 1 4 .3c0 1.5-2 1.6-2 3.2"/><circle class="bist-help-dot" cx="10" cy="13.7" r=".7"/></svg></button><div id="bist-help-popup" class="bist-help-popup" role="tooltip" hidden>Bist нельзя купить, продать, передать, вывести или обменять на деньги, товары и сертификаты. Их можно получить только с помощью своих знаний.</div></div></div>
       </div>
 
       <div class="card history-card">
@@ -296,6 +296,6 @@
     <button data-tab="profile"><span id="nav-profile-avatar" class="nav-icon nav-avatar" aria-hidden="true"><img id="nav-profile-photo" alt="" hidden><svg id="nav-profile-placeholder" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 22v-3a8 8 0 0 1 16 0v3"/></svg></span>Профиль</button>
   </nav>
 
-  <script src="../webapp/static/app.js?v=45f6325bbe"></script>
+  <script src="../webapp/static/app.js?v=7c05c322bf"></script>
 </body>
 </html>
