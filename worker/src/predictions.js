@@ -11,7 +11,6 @@ export const MIN_STAKE = 1;
 export const MAX_STAKE = 100;
 export const COOLDOWN = 5 * 60; // секунд между действиями с одним прогнозом
 export const ODDS_FRESH = 30 * 3600; // без свежих коэффициентов приём прогнозов закрыт
-const PAST_DAYS = 3;
 const AHEAD_DAYS = 14;
 
 export class PredictionError extends Error {
@@ -81,10 +80,10 @@ function publicMatch(m, now, admin = false) {
 
 // Список матчей с коэффициентами на исход и моими прогнозами — одно обращение к базе
 export async function listMatches(db, userId, { tournament = null, now, admin = false }) {
-  const from = admin ? 0 : now - PAST_DAYS * 86400;
+  const from = admin ? 0 : now;
   const to = admin ? Number.MAX_SAFE_INTEGER : now + AHEAD_DAYS * 86400;
   const t = TOURNAMENTS.some((x) => x.code === tournament) ? tournament : null;
-  const where = `m.start_time BETWEEN ?1 AND ?2 ${t ? "AND m.tournament = ?3" : ""}`;
+  const where = `m.start_time BETWEEN ?1 AND ?2 ${admin ? "" : "AND m.start_time > ?1 AND m.status NOT IN ('finished','cancelled')"} ${t ? "AND m.tournament = ?3" : ""}`;
   const params = t ? [from, to, t] : [from, to];
   const [matches, odds, mine] = await db.batch([
     db.prepare(`SELECT m.* FROM matches m WHERE ${where} ORDER BY m.start_time, m.id`).bind(...params),

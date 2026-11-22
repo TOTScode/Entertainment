@@ -249,10 +249,24 @@ test("kickoff closes player forecasts while active forecasts survive LIVE and aw
   for (const time of [NOW+1,NOW+6300,NOW+6301]) {
     await assert.rejects(placePrediction(db,2,{match_id:id,market:"1x2",outcome:"1",stake:1},time),/закрыт/);
     assert.equal((await getMatch(db,1,id,time)).open,false);
+    assert.equal((await listMatches(db,1,{now:time})).matches.some(m => m.id === id),false);
     const rows = await myPredictions(db,1,{now:time});
     assert.equal(rows.items.length,1);
     assert.equal(rows.items[0].status,"active");
     assert.equal(rows.items[0].match.live,time<NOW+6301);
   }
   assert.equal((await getMatch(db,1,id,NOW+1,{admin:true})).open,true);
+});
+
+
+test("match feed contains only upcoming matches; personal history and admin access are retained", async () => {
+  const past = await addMatch({start:NOW-60,op:"past"});
+  const future = await addMatch({start:NOW+3600,op:"future"});
+  const ended = await addMatch({start:NOW+7200,op:"ended"});
+  db.raw.prepare("UPDATE matches SET status='finished' WHERE id=?").run(ended);
+  const list = await listMatches(db,1,{now:NOW});
+  assert.deepEqual(list.matches.map(m => m.id),[future]);
+  const admin = await listMatches(db,1,{now:NOW,admin:true});
+  assert.ok(admin.matches.some(m => m.id===past));
+  assert.ok(admin.matches.some(m => m.id===ended));
 });

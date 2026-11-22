@@ -678,6 +678,7 @@ function predLine(p) {
 function matchCard(m) {
   const card = document.createElement("div");
   card.className = "card match";
+  if (!m.admin_mode) card.dataset.kickoff = m.start_time;
   const top = document.createElement("div");
   top.className = "match-top";
   top.innerHTML = "<span></span><span></span>";
@@ -773,36 +774,32 @@ async function loadMatches() {
     if (t !== predTournament) return;
     renderChips(data.tournaments);
     matchesCache = data.matches;
-    list.innerHTML = "";
-    const now = serverNow();
-    // Сначала ближайшие матчи по порядку, потом прошедшие — свежие сверху
-    const upcoming = data.matches.filter((m) => m.status !== "finished" && m.status !== "cancelled" && m.start_time > now - 3 * 3600);
-    const past = data.matches.filter((m) => !upcoming.includes(m)).reverse();
-    if (!data.matches.length) {
-      list.innerHTML = '<div class="card muted">Матчей на ближайшие две недели пока нет. Расписание обновляется автоматически.</div>';
-      return;
-    }
-    let day = null;
-    for (const m of upcoming) {
-      const label = dayLabel(m.start_time);
-      if (label !== day) {
-        day = label;
-        const h = document.createElement("div");
-        h.className = "day";
-        h.textContent = label;
-        list.appendChild(h);
-      }
-      list.appendChild(matchCard(m));
-    }
-    if (past.length) {
-      const h = document.createElement("div");
-      h.className = "day";
-      h.textContent = "Прошедшие";
-      list.appendChild(h);
-      for (const m of past) list.appendChild(matchCard(m));
-    }
+    renderMatchList(matchesCache);
   } catch (e) {
     showRetry(list, e.message, loadMatches);
+  }
+}
+
+function renderMatchList(matches) {
+  const list = $("match-list");
+  const now = serverNow();
+  const visible = matches.filter(m => m.admin_mode || (m.start_time > now && !["finished","cancelled"].includes(m.status)));
+  list.replaceChildren();
+  if (!visible.length) {
+    list.innerHTML = '<div class="card muted">Предстоящих матчей пока нет. Матчи с вашими прогнозами доступны в разделе «Мои прогнозы».</div>';
+    return;
+  }
+  let day = null;
+  for (const m of visible) {
+    const label = dayLabel(m.start_time);
+    if (label !== day) {
+      day = label;
+      const heading = document.createElement("div");
+      heading.className = "day";
+      heading.textContent = label;
+      list.append(heading);
+    }
+    list.append(matchCard(m));
   }
 }
 
@@ -1268,7 +1265,7 @@ function renderQuiz() {
   card.className = "card";
   if (!z) {
     card.className = "card soon";
-    card.innerHTML = '<h2>Сегодня игры нет</h2><p class="muted">Новая викторина появится здесь в 00:00 по Москве.</p>';
+    card.innerHTML = '<h2>Сегодня игры нет</h2><p class="muted">Новая викторина появится здесь в 13:00 по МСК.</p>';
   } else {
     const head = document.createElement("div");
     head.className = "quiz-head";
@@ -1917,13 +1914,12 @@ async function loadPrivacy() {
     $("processing-withdraw").classList.toggle("hidden", privacyPolicy?.processing_basis !== "consent");
     $("pref-profile").checked = Boolean(prefs.public_profile);
     $("pref-avatar").checked = Boolean(prefs.public_avatar);
-    $("pref-marketing").checked = Boolean(prefs.marketing_opt_out);
     $("policy-content").textContent = privacyPolicy
       ? `${privacyPolicy.operator}\n${privacyPolicy.contacts}\n${privacyPolicy.policy_text}\nЦели: ${privacyPolicy.purposes}\nОснования: ${privacyPolicy.legal_bases}\nХранение: ${privacyPolicy.retention}\nСервисы и страны: ${privacyPolicy.services.map((s) => s.name + " — " + s.purpose + " (" + s.countries.join(", ") + ")").join("; ")}\nОбращения: ${privacyPolicy.rights}`
       : "Оператор и политика данных ещё не утверждены. До публикации политики включение публичности и рекламы недоступно; отключить их можно в любой момент.";
     $("consent-text").textContent = privacyPolicy
-      ? `${privacyPolicy.publication_consent}\n${privacyPolicy.avatar_consent}\n${privacyPolicy.marketing_consent}\nСнятие отметки «Не получать рекламные уведомления» само по себе не означает согласия на рекламу. Согласия добровольные и отдельные; сохраняется версия ${privacyPolicy.version}.`
-      : "Снятая отметка не означает согласия на рекламу. Рекламные сообщения без отдельного согласия не отправляются.";
+      ? `${privacyPolicy.publication_consent}\n${privacyPolicy.avatar_consent}\nСогласия добровольные и отдельные; сохраняется версия ${privacyPolicy.version}.`
+      : "Публикация профиля и аватара доступна после публикации политики данных.";
   } catch (e) {
     $("policy-content").textContent = e.message;
   }
@@ -1975,7 +1971,6 @@ function initComplianceUI() {
     boardSeason = $("board-season").value || null;
     loadBoard();
   };
-  $("bet-report").onclick = () => openReport("prediction_error", bet?.match.id);
   $("processing-withdraw").onclick = async () => {
     try {
       await api("/api/consents", { method: "POST", body: JSON.stringify({ granted: false }) });
@@ -1989,7 +1984,6 @@ function initComplianceUI() {
       const values = {
         public_profile: $("pref-profile").checked,
         public_avatar: $("pref-avatar").checked,
-        marketing_opt_out: $("pref-marketing").checked,
         policy_version: privacyPolicy?.version,
         confirm_consent: true,
       };
@@ -2064,6 +2058,7 @@ init();
 // Keep kickoff controls and LIVE labels current even when a screen stays open.
 setInterval(() => {
   if (document.hidden) return;
+  if ([...document.querySelectorAll("#match-list .match[data-kickoff]")].some(node => Number(node.dataset.kickoff) <= serverNow())) renderMatchList(matchesCache);
   document.querySelectorAll("#match-list .match, #mine-list .pred-item").forEach(node => node.updateTiming?.());
   if (bet && !bet.loading) {
     const open = matchAcceptsPrediction(bet.match);
