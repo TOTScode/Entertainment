@@ -2,6 +2,18 @@ const tg = window.Telegram?.WebApp;
 tg?.ready();
 tg?.expand();
 
+// Use a controlled palette rather than combining arbitrary Telegram theme colors.
+function applyTheme() {
+  const theme = tg?.colorScheme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  document.documentElement.dataset.theme = theme;
+  const background = theme === "dark" ? "#101712" : "#edf0ea";
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", background);
+  tg?.setHeaderColor?.(background);
+  tg?.setBackgroundColor?.(background);
+}
+applyTheme();
+tg?.onEvent?.("themeChanged", applyTheme);
+
 const $ = (id) => document.getElementById(id);
 const TABS = ["quizzes", "predictions", "table", "profile"];
 let me = null;
@@ -70,10 +82,28 @@ function showError(text) {
 
 function showMsg(el, text, ok) {
   el.textContent = text;
+  el.setAttribute("role", ok ? "status" : "alert");
   el.className = `msg ${ok ? "ok" : "bad"}`;
 }
 
+function showRetry(container, message, retry) {
+  container.replaceChildren();
+  const card = document.createElement("div");
+  card.className = "card";
+  card.setAttribute("role", "alert");
+  const text = document.createElement("p");
+  text.className = "muted";
+  text.textContent = message;
+  const button = document.createElement("button");
+  button.className = "btn ghost retry-button";
+  button.textContent = "Попробовать снова";
+  button.onclick = () => { button.disabled = true; retry(); };
+  card.append(text, button);
+  container.append(card);
+}
+
 function openTab(name) {
+  window.scrollTo({ top: 0, behavior: "instant" });
   for (const t of TABS) $(`tab-${t}`).classList.toggle("hidden", t !== name);
   if (name === "table") loadBoard();
   if (name === "predictions") loadPredictionsTab();
@@ -81,7 +111,12 @@ function openTab(name) {
     loadQuiz();
     if (me.is_admin) loadQuizAdmin();
   }
-  document.querySelectorAll("#nav button").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
+  document.querySelectorAll("#nav button").forEach((b) => {
+    const active = b.dataset.tab === name;
+    b.classList.toggle("active", active);
+    if (active) b.setAttribute("aria-current", "page");
+    else b.removeAttribute("aria-current");
+  });
   try { localStorage.setItem("tots_tab", name); } catch {}
 }
 
@@ -135,7 +170,7 @@ function boardRow(r) {
   const rank = document.createElement("span");
   rank.className = `rank${r.rank <= 3 ? " top" : ""}`;
   rank.textContent = ["🥇", "🥈", "🥉"][r.rank - 1] || r.rank;
-  const who = document.createElement("span");
+  const who = document.createElement("button");
   who.className = "who";
   who.textContent = r.name;
   // Две колонки: ответы викторин и оценка «правильные × доля» (от 6 прогнозов).
@@ -162,6 +197,8 @@ let boardObserver = null;
 async function loadBoard() {
   const period = boardPeriod;
   const list = $("board");
+  list.innerHTML = '<li class="muted" role="status">Загружаем участников…</li>';
+  $("board-me").classList.add("hidden");
   try {
     const data = await api(`/api/leaderboard?period=${period}`);
     if (period !== boardPeriod) return; // пока грузили, переключили период
@@ -175,6 +212,7 @@ async function loadBoard() {
       if (r.id === me.id) myRow = li;
       list.appendChild(li);
     }
+    if (!data.rows.length) list.innerHTML = '<li class="muted">Участников пока нет</li>';
     // Своя строка закреплена внизу, пока её не видно в списке
     const pinned = $("board-me");
     pinned.innerHTML = "";
@@ -189,6 +227,9 @@ async function loadBoard() {
   } catch (e) {
     list.innerHTML = "";
     $("board-note").textContent = e.message;
+    const item = document.createElement("li");
+    showRetry(item, "Не удалось загрузить таблицу", loadBoard);
+    list.appendChild(item);
   }
 }
 
@@ -566,7 +607,7 @@ function matchCard(m) {
   top.innerHTML = "<span></span><span></span>";
   top.children[0].textContent = m.tournament_name;
   top.children[1].textContent = m.status === "finished" ? "Завершён" : kickoff(m.start_time);
-  const teams = document.createElement("div");
+  const teams = document.createElement("button");
   teams.className = "match-teams";
   teams.innerHTML = "<span></span>";
   teams.firstChild.textContent = `${m.home} — ${m.away}`;
@@ -645,6 +686,7 @@ function renderChips(tournaments) {
 async function loadMatches() {
   const t = predTournament;
   const list = $("match-list");
+  list.innerHTML = '<div class="card muted" role="status">Загружаем матчи…</div>';
   try {
     const data = await api(`/api/matches${t ? `?t=${t}` : ""}`);
     if (t !== predTournament) return;
@@ -679,11 +721,7 @@ async function loadMatches() {
       for (const m of past) list.appendChild(matchCard(m));
     }
   } catch (e) {
-    list.innerHTML = "";
-    const el = document.createElement("div");
-    el.className = "card error";
-    el.textContent = e.message;
-    list.appendChild(el);
+    showRetry(list, e.message, loadMatches);
   }
 }
 
@@ -850,6 +888,8 @@ function updatePayout() {
   if (!bet?.outcome) return;
   const price = bet.match.odds[bet.market]?.[bet.outcome];
   const stake = Number($("bet-stake").value);
+  $("bet-submit").disabled = !Number.isInteger(stake) || stake < STAKE_MIN || stake > STAKE_MAX ||
+    stake > me.balance + (activeOf(bet.match)?.stake || 0) || (activeOf(bet.match)?.next_change_at || 0) > serverNow();
   const el = $("bet-payout");
   if (!price) { el.textContent = ""; return; }
   if (!Number.isInteger(stake) || stake < STAKE_MIN || stake > STAKE_MAX) {
@@ -873,7 +913,10 @@ function tickCooldown() {
     cancel.textContent = `Отменить можно через ${t}`;
   } else {
     clearInterval(betTimer);
-    submit.disabled = cancel.disabled = false;
+    cancel.disabled = false;
+    const stake = Number($("bet-stake").value);
+    submit.disabled = !bet?.outcome || !Number.isInteger(stake) || stake < STAKE_MIN || stake > STAKE_MAX ||
+      stake > me.balance + (current?.stake || 0);
     submit.textContent = current ? "Заменить прогноз" : "Сделать прогноз";
     cancel.textContent = "Отменить прогноз";
   }
@@ -1001,9 +1044,11 @@ function renderQualify() {
   $("qualify").classList.toggle("done", done);
   $("qualify-num").textContent = `${fmt(me.balance)} / ${need} BIST`;
   $("qualify-bar").style.width = `${(have / need) * 100}%`;
+  $("qualify-progress").setAttribute("aria-valuemax", need);
+  $("qualify-progress").setAttribute("aria-valuenow", have);
   $("qualify-text").textContent = done
-    ? "✅ Вы проходите в финальную викторину сезона. Призы получат три лучших участника финала."
-    : `Наберите ${need} BIST, чтобы пройти в финальную викторину сезона. Осталось ${fmt(need - me.balance)}. Призы получат три лучших участника финала.`;
+    ? "Порог квалификации достигнут"
+    : `Ещё ${fmt(need - me.balance)} BIST до квалификации`;
 }
 
 function mediaEl(media) {
@@ -1086,6 +1131,7 @@ function questionEl(q, i, live) {
   } else if (!q.done) {
     const input = document.createElement("input");
     input.className = "input";
+    input.id = `quiz-answer-${q.id}`;
     input.maxLength = 200;
     input.placeholder = "Ваш ответ";
     input.autocomplete = "off";
@@ -1107,7 +1153,10 @@ function questionEl(q, i, live) {
       a.textContent = `Осталось попыток: ${q.attempts_left}`;
       box.appendChild(a);
     }
-    box.append(input, btn, msg);
+    const label = document.createElement("label");
+    label.htmlFor = input.id;
+    label.textContent = "Ваш ответ";
+    box.append(label, input, btn, msg);
   }
   return box;
 }
@@ -1121,7 +1170,7 @@ function renderQuiz() {
   card.className = "card";
   if (!z) {
     card.className = "card soon";
-    card.innerHTML = '<div class="soon-icon">🧠</div><h2>Викторины</h2><p class="muted">Новая викторина появится здесь в 00:00 по Москве.</p>';
+    card.innerHTML = '<h2>Сегодня игры нет</h2><p class="muted">Новая викторина появится здесь в 00:00 по Москве.</p>';
   } else {
     const head = document.createElement("div");
     head.className = "quiz-head";
@@ -1170,15 +1219,12 @@ function tickQuiz() {
 }
 
 async function loadQuiz() {
+  $("quiz-current").innerHTML = '<div class="card muted" role="status">Загружаем викторину…</div>';
   try {
     quiz = await api("/api/quiz");
     renderQuiz();
   } catch (e) {
-    $("quiz-current").innerHTML = "";
-    const el = document.createElement("div");
-    el.className = "card error";
-    el.textContent = e.message;
-    $("quiz-current").appendChild(el);
+    showRetry($("quiz-current"), e.message, loadQuiz);
   }
 }
 
@@ -1327,9 +1373,9 @@ function questionForm(q = {}) {
   box.dataset.media = q.media_id || "";
   box.innerHTML = `
     <div class="qa-q-head"><span class="qa-n"></span><button class="icon-btn qa-del" title="Убрать вопрос">✕</button></div>
-    <textarea class="input qa-text" maxlength="2000" placeholder="Текст вопроса"></textarea>
-    <div class="qa-file"><input type="file" accept="image/*,audio/*,video/*,*/*"><span class="qa-file-name muted"></span><button class="icon-btn qa-file-del hidden" title="Убрать файл">✕</button></div>
-    <textarea class="input qa-answers" placeholder="Правильные ответы, каждый вариант с новой строки"></textarea>`;
+    <label>Текст вопроса<textarea class="input qa-text" maxlength="2000"></textarea></label>
+    <div class="qa-file"><label>Медиафайл<input type="file" accept="image/*,audio/*,video/*,*/*"></label><span class="qa-file-name muted"></span><button class="icon-btn qa-file-del hidden" title="Убрать файл">✕</button></div>
+    <label>Правильные ответы<textarea class="input qa-answers" placeholder="Каждый вариант с новой строки"></textarea></label>`;
   box.querySelector(".qa-text").value = q.text || "";
   box.querySelector(".qa-answers").value = (q.answers || []).join("\n");
   const name = box.querySelector(".qa-file-name");
@@ -1509,5 +1555,38 @@ async function init() {
   $("balance-chip").classList.remove("hidden");
   openTab(startTab());
 }
+
+// Keep keyboard focus inside an open sheet and return it to its opener.
+let focusedBeforeSheet = null;
+let activeSheet = null;
+const focusableIn = (el) => [...el.querySelectorAll("button, input, textarea, select, a[href], summary, [tabindex]")]
+  .filter((node) => !node.disabled && node.tabIndex >= 0 && node.getClientRects().length);
+new MutationObserver(() => {
+  const next = [...document.querySelectorAll(".overlay")].find(el => !el.classList.contains("hidden"));
+  if (next && next !== activeSheet) {
+    focusedBeforeSheet = document.activeElement;
+    activeSheet = next;
+    document.body.classList.add("dialog-open");
+    focusableIn(next)[0]?.focus();
+  } else if (!next && activeSheet) {
+    activeSheet = null;
+    document.body.classList.remove("dialog-open");
+    if (focusedBeforeSheet?.isConnected) focusedBeforeSheet.focus();
+  } else if (next && !next.contains(document.activeElement)) {
+    focusableIn(next)[0]?.focus();
+  }
+}).observe(document.body, { attributes: true, attributeFilter: ["class"], childList: true, subtree: true });
+document.addEventListener("keydown", (event) => {
+  if (!activeSheet) return;
+  if (event.key === "Escape") {
+    event.preventDefault();
+    activeSheet.querySelector(".sheet-head .icon-btn")?.click();
+  } else if (event.key === "Tab") {
+    const controls = focusableIn(activeSheet);
+    const first = controls[0], last = controls.at(-1);
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+  }
+});
 
 init();

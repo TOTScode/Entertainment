@@ -1,36 +1,282 @@
 <!doctype html>
 <html lang="ru">
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>TOTS — 7.1: сценарии, wireframes и дизайн-система</title>
-<style>
-:root{color-scheme:dark;--bg:#101b17;--surface:#1b2b23;--soft:#25382d;--text:#f3f7ed;--muted:#b4c4b8;--line:#3c5042;--accent:#c5f277;--ink:#172214;--danger:#ffb3a9}
-:root.light{color-scheme:light;--bg:#f3f5ed;--surface:#fff;--soft:#e7eddf;--text:#17281f;--muted:#536454;--line:#cad4c6;--accent:#234e34;--ink:#fff;--danger:#a32b20}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 system-ui,sans-serif}button,input,select{font:inherit}button{cursor:pointer}button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--accent);outline-offset:3px}button{color:inherit}button:disabled{cursor:default;opacity:.6}[hidden]{display:none!important}.review{max-width:1000px;margin:auto;padding:24px;display:grid;grid-template-columns:1fr 430px;gap:52px;align-items:start}.note{padding-top:45px}.eyebrow{font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);font-weight:700}h1{font-size:42px;line-height:1.12;letter-spacing:-.045em;margin:16px 0}h2{font-size:30px;line-height:1.15;letter-spacing:-.035em;margin:8px 0 18px}h3{font-size:20px;line-height:1.25;margin:0 0 10px}p{margin:8px 0 18px}.muted{color:var(--muted)}.tools{display:flex;flex-wrap:wrap;gap:8px;margin-top:24px}.tools label{display:grid;gap:6px;width:100%}select{background:var(--surface);color:var(--text);border:1px solid var(--line);padding:10px;border-radius:10px;width:100%}.phone{width:100%;min-width:0;border:1px solid var(--line);border-radius:28px;overflow:hidden;background:var(--bg)}header{padding:22px 20px 16px;display:flex;align-items:center;justify-content:space-between}.logo{font-size:24px;letter-spacing:-1px;font-weight:900}.logo em{color:var(--accent);font-style:normal}.balance{font-size:14px;border:1px solid var(--line);border-radius:20px;padding:7px 12px;font-variant-numeric:tabular-nums}.demo{font-size:12px;color:var(--muted);margin:0 20px 20px}main{padding:0 20px 20px;min-height:510px}.card{background:var(--surface);border:1px solid var(--line);padding:18px;border-radius:18px;margin:14px 0}.hero{background:var(--accent);color:var(--ink);padding:24px;border-radius:20px;margin:16px 0}.hero .eyebrow{color:inherit}.hero h3{font-size:32px;letter-spacing:-.04em;margin:14px 0}.hero p{font-size:14px}.row{display:flex;justify-content:space-between;align-items:center;gap:12px;min-width:0}.row.wrap{flex-wrap:wrap}.small{font-size:13px}.tag{font-size:12px;padding:4px 8px;border:1px solid currentColor;border-radius:7px;white-space:nowrap}.btn{min-height:44px;padding:10px 16px;border-radius:12px;border:1px solid var(--line);background:var(--soft);font-weight:650}.primary{background:var(--accent);color:var(--ink);border-color:transparent}.hero .primary{background:var(--ink);color:var(--accent)}.wide{width:100%}.progress{height:6px;background:var(--soft);border-radius:8px;margin:12px 0;overflow:hidden}.progress span{display:block;width:72%;height:100%;background:var(--accent)}.linkbtn{min-height:44px;border:0;background:transparent;padding:8px 0;text-align:left;text-decoration:underline;text-underline-offset:4px}.segmented{display:flex;gap:4px;background:var(--surface);border-radius:13px;padding:4px;margin:14px 0}.segmented button{flex:1;min-height:44px;border:0;background:transparent;border-radius:10px;font-size:14px}.segmented button[aria-pressed=true]{background:var(--accent);color:var(--ink)}.teams{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;text-align:center;margin:20px 0;font-weight:700}.teams span{overflow-wrap:anywhere}.teams .vs{font-size:12px;color:var(--muted)}.odds{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}.odds button{min-height:58px;border:1px solid var(--line);background:var(--soft);border-radius:10px}.odds small{display:block;color:var(--muted)}nav{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));padding:10px 8px 14px;background:var(--surface);border-top:1px solid var(--line);gap:2px}nav button{border:0;background:transparent;border-radius:12px;min-height:56px;font-size:11px;padding:6px 1px;color:var(--muted)}nav button[aria-current=page]{background:var(--soft);color:var(--text)}nav .icon{font-size:18px;display:block;line-height:1.4}.board{width:100%;border-collapse:collapse;font-size:14px}.board th{font-size:12px;color:var(--muted);font-weight:500;text-align:right}.board th:first-child,.board td:first-child{text-align:left}.board td{padding:15px 5px;text-align:right;border-bottom:1px solid var(--line)}.board tr.me{background:var(--soft)}.rank{color:var(--muted);margin-right:10px}.avatar{width:52px;height:52px;border-radius:50%;background:var(--accent);color:var(--ink);display:grid;place-items:center;font-size:22px;font-weight:800}.big{font-size:44px;letter-spacing:-.05em;font-weight:750}.history{padding:14px 0;border-bottom:1px solid var(--line)}.empty{text-align:center;padding:38px 12px}.empty .symbol{font-size:36px}.empty p{color:var(--muted)}.error{color:var(--danger)}.skeleton{height:100px;background:var(--surface);border-radius:16px;margin:16px 0}.skeleton:nth-child(2){height:190px}.state{padding-top:12px}dialog{background:var(--surface);color:var(--text);border:1px solid var(--line);border-radius:20px;padding:24px;width:calc(100% - 32px);max-width:390px}dialog::backdrop{background:#0009}dialog input{width:100%;min-height:48px;padding:10px;margin:8px 0 16px;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:10px}dialog label{display:block}.feedback{min-height:24px;margin:12px 0}.close{margin-bottom:18px}.footnote{font-size:13px;color:var(--muted);margin-top:30px}
-@media(max-width:760px){.review{grid-template-columns:1fr;max-width:470px;gap:24px;padding:16px}.note{padding-top:0}h1{font-size:32px}.phone{border-radius:20px}.tools{margin-top:12px}.note p{margin-bottom:10px}}@media(max-width:350px){main{padding:0 12px 16px}header{padding:18px 12px}.demo{margin-left:12px;margin-right:12px}.hero{padding:18px}.board{font-size:13px}.rank{margin-right:4px}}
-</style>
-<link rel="stylesheet" href="design-system.css">
-<div class="review">
-<aside class="note"><div class="eyebrow">TOTS / Этап 7.1 / Концепция A</div><h1>Твой клуб.<br>Твоя игра.</h1><p class="muted">Первое направление дизайна: футбольная атмосфера, чёткая иерархия и одно главное действие на экране.</p><div class="tools"><button class="btn" id="theme">Светлая тема</button><label>Состояние экрана<select id="state"><option value="normal">Обычный экран</option><option value="empty">Нет данных</option><option value="loading">Загрузка</option><option value="error">Ошибка сети</option></select></label></div><p class="footnote">Интерактивный макет. Все игроки, матчи, суммы и результаты — демонстрационные. Никаких операций с настоящими BIST.</p></aside>
-<div class="phone"><header><span class="logo">TOTS<em> /</em></span><span class="balance">72.0 BIST</span></header><p class="demo">Демонстрация · данные вымышлены</p><main>
-<div id="state-panel" class="state" role="status" hidden></div><div id="screens">
-<section data-screen="quizzes"><div class="eyebrow">Каждый день — новая игра</div><h2>Викторины</h2><div class="card"><div class="row"><b>Путь в финал</b><span class="small">72 / 100 BIST</span></div><div class="progress" role="progressbar" aria-label="Квалификация" aria-valuemin="0" aria-valuemax="100" aria-valuenow="72"><span></span></div><div class="small muted">Ещё 28 BIST до порога квалификации</div></div><div class="hero"><div class="row"><span class="eyebrow">Викторина дня</span><span class="tag">+1 BIST / ответ</span></div><h3>Вечера<br>Лиги чемпионов</h3><p>5 вопросов · 60 секунд на вопрос<br>Одна попытка. Сумеешь вспомнить всё?</p><button class="btn primary wide" id="open-question">Открыть первый вопрос →</button></div><div class="row small muted"><span>Смена викторины</span><span>В 00:00 МСК</span></div><button class="linkbtn" id="archive">Прошлые викторины →</button><p id="archive-result" class="small muted" hidden>Демо-архив: «Легенды футбола» · 4 из 5 верных ответов.</p></section>
-<section data-screen="predictions" hidden><div class="eyebrow">Почувствуй игру</div><h2>Прогнозы</h2><div class="segmented" id="prediction-tabs"><button aria-pressed="true" data-view="matches">Матчи</button><button aria-pressed="false" data-view="mine">Мои прогнозы</button></div><div id="matches"><div class="small muted">Демонстрационный матч · Лига чемпионов</div><div class="card"><div class="row small muted"><span>Сегодня</span><span>22:00 МСК</span></div><div class="teams"><span>Арсенал</span><span class="vs">VS</span><span>Интер</span></div><div class="odds"><button data-outcome="П1" data-weight="2.1"><small>П1</small><b>2.10</b></button><button data-outcome="Ничья" data-weight="3.2"><small>Ничья</small><b>3.20</b></button><button data-outcome="П2" data-weight="3.6"><small>П2</small><b>3.60</b></button></div><p class="small muted" style="margin:12px 0 0">Выберите исход. Число — вес прогноза.</p></div><p class="small muted">Один прогноз на матч. Заменить или отменить можно до начала матча с интервалом 5 минут.</p></div><div id="mine" hidden><div class="card"><span class="tag">Рассчитан · выигрыш</span><h3 style="margin-top:16px">Бавария — Бенфика</h3><div class="row"><span>П1 · 10 BIST × 1.8</span><b>+18.0 BIST</b></div></div></div></section>
-<section data-screen="table" hidden><div class="eyebrow">Играй. Угадывай. Поднимайся.</div><h2>Таблица</h2><p class="small muted">Демонстрационная общая таблица</p><p class="small muted">Места по взвешенной оценке</p><table class="board"><thead><tr><th>Участник</th><th>Ответы</th><th>Оценка</th></tr></thead><tbody id="rows"></tbody></table><p class="small muted" style="margin-top:16px">Оценка = правильные² / все попытки. Учитывает долю и число верных исходов. Порог — 6 исходов. При равенстве — дата регистрации.</p></section>
-<section data-screen="profile" hidden><div class="eyebrow">Твой футбольный профиль</div><h2>Профиль</h2><div class="row" style="justify-content:start"><div class="avatar">Т</div><div><b>Твой ник</b><div class="small muted">В клубе 24 дня</div></div></div><div class="card"><span class="small muted">Твой баланс</span><div class="big">72.0 <span style="font-size:18px">BIST</span></div><div class="row small"><span class="muted">Получено 112.0</span><span class="muted">Потрачено 40.0</span></div></div><h3>Последние операции</h3><div class="history row"><div>Ответ в викторине<div class="small muted">Сегодня · Легенды футбола</div></div><b>+1.0</b></div><div class="history row"><div>Прогноз на матч<div class="small muted">Вчера · П1</div></div><b>−10.0</b></div><div class="history row"><div>Выигрыш по прогнозу<div class="small muted">Вчера · П1</div></div><b>+18.0</b></div></section>
-</div></main><nav aria-label="Основные разделы"><button data-tab="quizzes" aria-current="page"><span class="icon" aria-hidden="true">◈</span>Викторины</button><button data-tab="predictions"><span class="icon" aria-hidden="true">⚽</span>Прогнозы</button><button data-tab="table"><span class="icon" aria-hidden="true">≡</span>Таблица</button><button data-tab="profile"><span class="icon" aria-hidden="true">◎</span>Профиль</button></nav></div>
-</div>
-<dialog id="question" aria-labelledby="question-title"><button class="btn close" data-close>Закрыть</button><div class="eyebrow">Демонстрационный вопрос</div><h3 id="question-title">Какой клуб выиграл Лигу чемпионов в 2005 году?</h3><p class="small muted">В макете таймер не запускается.</p><form id="answer-form"><label for="answer">Ваш ответ</label><input id="answer" required autocomplete="off"><button class="btn primary wide">Проверить ответ</button></form><div id="answer-result" class="feedback" role="status"></div></dialog>
-<dialog id="bet" aria-labelledby="bet-title"><button class="btn close" data-close>Закрыть</button><div class="eyebrow">Демонстрационный прогноз</div><h3 id="bet-title">Арсенал — Интер</h3><p id="bet-choice"></p><label for="stake">Сумма, BIST (от 1 до 72)</label><input id="stake" type="number" min="1" max="72" step="1" value="10"><p id="payout" role="status"></p><p class="small muted">Макет не отправляет прогноз и не списывает BIST.</p></dialog>
-<script>
-const $=id=>document.getElementById(id);let weight=2.1;
-document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-screen]').forEach(s=>s.hidden=s.dataset.screen!==b.dataset.tab);document.querySelectorAll('[data-tab]').forEach(n=>{n.removeAttribute('aria-current');});b.setAttribute('aria-current','page');});
-$('theme').onclick=()=>{const light=document.documentElement.classList.toggle('light');$('theme').textContent=light?'Тёмная тема':'Светлая тема';};
-function setState(){const state=$('state').value;$('screens').hidden=state!=='normal';$('state-panel').hidden=state==='normal';const messages={empty:'<div class="empty"><div class="symbol" aria-hidden="true">○</div><h3>Пока ничего нет</h3><p>Здесь появятся данные раздела.</p></div>',loading:'<span class="muted">Загружаем…</span><div class="skeleton"></div><div class="skeleton"></div>',error:'<div class="empty"><h3>Не удалось загрузить</h3><p>Проверьте соединение и попробуйте ещё раз.</p><button class="btn primary" id="retry">Повторить</button></div>'};$('state-panel').innerHTML=messages[state]||'';if($('retry'))$('retry').onclick=()=>{$('state').value='normal';setState();};}$('state').onchange=setState;
-$('open-question').onclick=()=>$('question').showModal();document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>b.closest('dialog').close());$('answer-form').onsubmit=e=>{e.preventDefault();const correct=$('answer').value.toLowerCase().trim().includes('ливерпул');$('answer-result').textContent=correct?'Верно! В макете BIST не начисляются.':'Неверно. Демо-ответ: Ливерпуль.';};$('archive').onclick=()=>$('archive-result').hidden=!$('archive-result').hidden;
-function payout(){const n=$('stake').valueAsNumber;$('payout').textContent=Number.isInteger(n)&&n>=1&&n<=72?'Возможный выигрыш: '+(Math.floor(n*weight*10)/10).toFixed(1)+' BIST':'Введите целую сумму от 1 до 72 BIST.';}$('stake').oninput=payout;document.querySelectorAll('[data-outcome]').forEach(b=>b.onclick=()=>{weight=Number(b.dataset.weight);$('bet-choice').textContent=b.dataset.outcome+' · вес '+weight.toFixed(2);payout();$('bet').showModal();});
-document.querySelectorAll('#prediction-tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('#prediction-tabs button').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));$('matches').hidden=b.dataset.view!=='matches';$('mine').hidden=b.dataset.view!=='mine';});
-const players=[{name:'Северная трибуна',quiz:24,won:9,bets:15},{name:'Твой ник',quiz:18,won:8,bets:10},{name:'Голос стадиона',quiz:15,won:7,bets:12},{name:'Новый игрок',quiz:2,won:1,bets:3}];function board(){const rows=[...players].sort((a,b)=>(b.bets>=6?b.won*b.won/b.bets:-1)-(a.bets>=6?a.won*a.won/a.bets:-1));if($('own-rank'))$('own-rank').textContent=(rows.findIndex(p=>p.name==='Твой ник')+1)+' · Твой ник';$('rows').innerHTML=rows.map((p,i)=>'<tr class="'+(p.name==='Твой ник'?'me':'')+'"><td><span class="rank">'+(i+1)+'</span>'+p.name+'</td><td>'+p.quiz+'</td><td>'+(p.bets>=6?(p.won*p.won/p.bets).toFixed(1):'—')+'</td></tr>').join('');}board();
-</script>
-<script src="design-flows.js"></script>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101712">
+  <title>TOTS · новый дизайн · демонстрация</title>
+  <script src="preview-fixtures.js"></script>
+  <link rel="stylesheet" href="../webapp/static/style.css">
+</head>
+<body>
+<aside class="preview-tools" aria-label="Настройки демонстрации">
+  <strong>Новый дизайн TOTS</strong><p>Рабочие компоненты · вымышленные данные · без настоящих операций</p>
+  <div><label>Тема<select id="preview-theme"><option value="light">Светлая</option><option value="dark">Тёмная</option></select></label>
+  <label>Состояние<select id="preview-state"><option value="normal">Обычное</option><option value="empty">Нет данных</option><option value="error">Ошибка сети</option><option value="loading">Загрузка</option></select></label>
+  <label>Роль<select id="preview-role"><option value="player">Игрок</option><option value="admin">Администратор</option></select></label></div>
+</aside>
+<style>.preview-tools{max-width:640px;margin:20px auto 0;border-bottom:1px solid var(--line);padding:0 0 20px}.preview-tools strong{font-size:14px}.preview-tools p{font-size:12px;color:var(--hint);margin:6px 0 12px}.preview-tools>div{display:flex;gap:12px;flex-wrap:wrap}.preview-tools label{font-size:12px;color:var(--hint);display:grid;gap:4px;flex:1;min-width:120px}.preview-tools select{width:100%;min-height:44px;background:var(--card);color:var(--text);border:1px solid var(--input-line);border-radius:8px;padding:8px;font:inherit}</style>
+  <header class="top">
+    <div class="logo">TOTS</div>
+    <div id="balance-chip" class="chip hidden"><span id="chip-balance">0</span> BIST</div>
+  </header>
+
+  <main>
+    <section id="loading" class="card muted">Загрузка…</section>
+    <section id="error" class="card error hidden"></section>
+
+    <!-- Викторины -->
+    <section id="tab-quizzes" class="tab hidden">
+      <div class="page-heading"><h1>Викторины</h1><p>Проверь свои футбольные знания</p></div>
+      <!-- Квалификация в финал сезона: видна всегда -->
+      <div id="qualify" class="card qualify">
+        <div class="qualify-head"><b>Путь в финал</b><span id="qualify-num"></span></div>
+        <div id="qualify-progress" class="progress" role="progressbar" aria-label="Прогресс квалификации" aria-valuemin="0" aria-valuemax="100"><div id="qualify-bar"></div></div>
+        <div id="qualify-text" class="muted small"></div>
+        <details class="disclosure"><summary>Условия финала</summary><p class="muted small">Наберите 100 BIST для квалификации. Призы получат три лучших участника финальной викторины. Дополнительные BIST не дают преимуществ в финале.</p></details>
+      </div>
+      <div id="quiz-current"><div class="card muted">Загрузка…</div></div>
+      <details id="quiz-past-card" class="card disclosure hidden">
+        <summary>Прошлые викторины</summary>
+        <ul id="quiz-past" class="list"></ul>
+      </details>
+
+      <!-- Управление викторинами: только администраторам -->
+      <details id="quiz-admin" class="card disclosure admin-zone hidden">
+        <summary>Управление викторинами</summary>
+        <div class="settings-grid">
+          <label>Смена раз в, дней<input id="qs-every" class="input" type="number" min="1" max="30" step="1" inputmode="numeric"></label>
+          <label>Секунд на вопрос (0 — без таймера)<input id="qs-time" class="input" type="number" min="0" max="3600" step="1" inputmode="numeric"></label>
+          <label>Попыток на вопрос<input id="qs-attempts" class="input" type="number" min="1" max="10" step="1" inputmode="numeric"></label>
+        </div>
+        <button id="qs-save" class="btn wide ghost">Сохранить настройки</button>
+        <div id="qs-msg" class="msg hidden"></div>
+
+        <h3 class="mt">Очередь</h3>
+        <ul id="qa-queue" class="list"></ul>
+
+        <h3 id="qa-form-title" class="mt">Новая викторина</h3>
+        <label for="qa-title">Название викторины</label>
+        <input id="qa-title" class="input" maxlength="120" placeholder="Например, «Легенды Ливерпуля»">
+        <label class="muted small">Награда за правильный ответ, BIST<input id="qa-reward" class="input" type="number" min="0" max="100" step="0.1" inputmode="decimal" value="1"></label>
+        <div id="qa-questions"></div>
+        <button id="qa-add" class="btn wide ghost">+ Вопрос</button>
+        <button id="qa-save" class="btn wide">Добавить в очередь</button>
+        <button id="qa-cancel" class="btn wide ghost hidden">Отменить правку</button>
+        <div id="qa-msg" class="msg hidden"></div>
+      </details>
+    </section>
+
+    <!-- Прогнозы -->
+    <section id="tab-predictions" class="tab hidden">
+      <div class="page-heading"><h1>Прогнозы</h1><p>Выбери матч и свой исход</p></div>
+      <div id="pred-view" class="segmented">
+        <button data-view="matches" class="active">Матчи</button>
+        <button data-view="mine">Мои прогнозы</button>
+      </div>
+      <div id="pred-matches">
+        <div id="t-chips" class="chips"></div>
+        <div id="match-list"><div class="card muted">Загрузка…</div></div>
+      </div>
+      <div id="pred-mine" class="hidden">
+        <div id="mine-scope" class="segmented">
+          <button data-scope="active" class="active">Активные</button>
+          <button data-scope="settled">Завершённые</button>
+        </div>
+        <div class="card"><ul id="mine-list" class="list"></ul></div>
+        <button id="mine-more" class="btn wide ghost hidden">Показать ещё</button>
+      </div>
+    </section>
+
+    <!-- Таблица -->
+    <section id="tab-table" class="tab hidden">
+      <div class="page-heading"><h1>Таблица</h1><p>Рейтинг по точности и числу верных исходов</p></div>
+      <div class="segmented" role="tablist">
+        <button data-period="all" class="active">Общая</button>
+        <button data-period="week">Неделя</button>
+        <button data-period="month">Месяц</button>
+      </div>
+      <div class="card board-card">
+        <div id="board-note" class="muted small"></div>
+        <div class="board-head"><span>Участник</span><span class="quiz-heading" title="Правильные ответы в викторинах">Ответы</span><span class="accuracy-heading" title="Взвешенная оценка исходов">Оценка ↓</span></div>
+        <ol id="board" class="board"></ol>
+      </div>
+      <details class="disclosure help-block"><summary>Как считается оценка</summary><p class="muted">Оценка = правильные² / все попытки. Все попытки — завершённые правильные и неправильные прогнозы на исход. Отменённые и ожидающие результата не учитываются.</p><p class="muted">80 правильных из 100 попыток дают 64 балла. Оценка доступна после 6 попыток. При равенстве — дата регистрации. Ответы викторин и точный счёт на место не влияют.</p></details>
+      <div id="board-me" class="board-me hidden"></div>
+    </section>
+
+    <!-- Профиль -->
+    <section id="tab-profile" class="tab hidden">
+      <div class="page-heading"><h1>Профиль</h1></div>
+      <div class="card profile">
+        <div id="avatar" class="avatar"></div>
+        <div class="profile-text">
+          <div class="name-row">
+            <div id="name" class="name"></div>
+          </div>
+          <div id="username" class="muted"></div>
+          <div id="tenure" class="muted tenure"></div>
+        </div>
+      </div>
+
+      <div class="card wallet">
+        <div class="muted">Баланс</div>
+        <div class="balance"><span id="balance">—</span> <span id="coin-label">BIST</span></div>
+        <div id="welcome" class="welcome hidden"></div>
+        <div class="stats">
+          <div><div class="muted">Получено</div><b id="stat-earned" class="plus">—</b></div>
+          <div><div class="muted">Потрачено</div><b id="stat-spent" class="minus">—</b></div>
+        </div>
+      </div>
+
+      <div class="card history-card">
+        <h2>История операций</h2>
+        <ul id="history" class="list"></ul>
+        <div id="history-more" class="muted small center hidden">Загрузка…</div>
+      </div>
+
+      <!-- Дашборд: только администраторам -->
+      <details id="dash" class="card disclosure admin-zone hidden">
+        <summary>Дашборд администратора</summary>
+        <div id="dash-period" class="segmented">
+          <button data-period="day" class="active">Сегодня</button>
+          <button data-period="week">Неделя</button>
+          <button data-period="month">Месяц</button>
+        </div>
+        <div id="dash-body" class="dash"><div class="muted">Загрузка…</div></div>
+      </details>
+
+      <!-- Админка: показывается только администраторам -->
+      <details id="admin" class="card disclosure admin-zone hidden">
+        <summary>Управление участниками</summary>
+        <label for="admin-q">Найти участника</label>
+        <div class="inline">
+          <input id="admin-q" class="input" placeholder="ID, @username или имя" autocomplete="off">
+          <button id="admin-search" class="btn">Найти</button>
+        </div>
+        <ul id="admin-users" class="list"></ul>
+
+        <div id="admin-form" class="admin-form hidden">
+          <div id="admin-target" class="name small-name"></div>
+          <label for="admin-amount">Изменение баланса, BIST</label>
+          <input id="admin-amount" class="input" type="number" step="0.1" inputmode="decimal" placeholder="Например, +25 или −2.5">
+          <label for="admin-reason">Причина</label>
+          <input id="admin-reason" class="input" maxlength="200" placeholder="Обязательно">
+          <button id="admin-apply" class="btn">Изменить баланс</button>
+          <div id="admin-msg" class="msg hidden"></div>
+        </div>
+
+        <h3 class="mt">Действия администраторов</h3>
+        <ul id="admin-audit" class="list"><li class="muted">Пока пусто</li></ul>
+      </details>
+    </section>
+  </main>
+
+  <!-- Профиль другого участника -->
+  <div id="user-dialog" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="u-name">
+    <div class="sheet" tabindex="-1">
+      <div class="sheet-head">
+        <span></span>
+        <button id="user-close" class="icon-btn" aria-label="Закрыть">✕</button>
+      </div>
+      <div class="profile">
+        <div id="u-avatar" class="avatar"></div>
+        <div class="profile-text">
+          <div id="u-name" class="name"></div>
+          <a id="u-username" class="muted link" target="_blank" rel="noopener"></a>
+          <div id="u-tenure" class="muted tenure"></div>
+        </div>
+      </div>
+      <div class="ustats">
+        <div><div class="muted">Место</div><b id="u-rank">—</b></div>
+        <div><div class="muted">Викторины</div><b id="u-quiz">—</b></div>
+        <div><div class="muted">Исходы</div><b id="u-acc">—</b></div>
+        <div><div class="muted">Баланс</div><b id="u-balance" class="gold">—</b></div>
+        <div><div class="muted">Получено</div><b id="u-earned" class="plus">—</b></div>
+        <div><div class="muted">Потрачено</div><b id="u-spent" class="minus">—</b></div>
+      </div>
+
+      <!-- Админка в карточке: только для администраторов -->
+      <div id="u-admin" class="u-admin hidden">
+        <h3>🛠 Админка</h3>
+        <div class="muted small">Telegram ID: <span id="u-id"></span></div>
+        <label for="u-amount">Изменение баланса, BIST</label>
+        <input id="u-amount" class="input" type="number" step="0.1" inputmode="decimal" placeholder="Например, +25 или −2.5">
+        <label for="u-reason">Причина</label>
+        <input id="u-reason" class="input" maxlength="200" placeholder="Обязательно">
+        <button id="u-apply" class="btn wide">Изменить баланс</button>
+        <div id="u-msg" class="msg hidden"></div>
+        <h3 class="mt">История операций</h3>
+        <ul id="u-history" class="list"></ul>
+        <button id="u-more" class="btn wide ghost hidden">Показать ещё</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Прогноз на матч -->
+  <div id="bet-dialog" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="bet-title">
+    <div class="sheet">
+      <div class="sheet-head">
+        <h3 id="bet-title"></h3>
+        <button id="bet-close" class="icon-btn" aria-label="Закрыть">✕</button>
+      </div>
+      <div id="bet-sub" class="muted small"></div>
+      <div id="bet-state" class="bet-state hidden"></div>
+      <div id="bet-markets" class="segmented">
+        <button data-market="1x2" class="active">Исход</button>
+        <button data-market="score">Точный счёт</button>
+      </div>
+      <div id="bet-outcomes" class="outcomes"></div>
+      <div id="bet-current" class="bet-current hidden"></div>
+      <div id="bet-form" class="hidden">
+        <div class="stake-row">
+          <label for="bet-stake">Сумма прогноза, BIST</label>
+          <input id="bet-stake" class="input" type="number" min="1" max="100" step="1" inputmode="numeric" placeholder="Ставка, BIST">
+          <div class="quick">
+            <button data-stake="5">5</button><button data-stake="10">10</button><button data-stake="25">25</button><button data-stake="50">50</button><button data-stake="100">100</button>
+          </div>
+        </div>
+        <div id="bet-payout" class="muted small"></div>
+        <button id="bet-submit" class="btn wide">Сделать прогноз</button>
+      </div>
+      <button id="bet-cancel" class="btn wide ghost hidden">Отменить прогноз</button>
+      <div id="bet-msg" class="msg hidden"></div>
+      <p class="muted small rules">Один прогноз на матч. Приём до начала матча. Замена или отмена — не чаще раза в 5 минут.</p>
+      <details class="disclosure"><summary>Все правила прогноза</summary><p class="muted small">Вес фиксируется при подтверждении; при выигрыше ставка умножается на него. Можно выбрать исход или точный счёт. Учитывается только основное время. Новый прогноз заменит предыдущий на этот матч.</p></details>
+
+      <!-- Исправление счёта: только администраторам, только для завершённых матчей -->
+      <div id="bet-admin" class="u-admin hidden">
+        <h3>🛠 Исправить счёт</h3>
+        <div class="inline">
+          <label>Хозяева<input id="fix-home" class="input" type="number" min="0" max="30" step="1" inputmode="numeric"></label>
+          <label>Гости<input id="fix-away" class="input" type="number" min="0" max="30" step="1" inputmode="numeric"></label>
+        </div>
+        <label for="fix-reason">Причина исправления</label><input id="fix-reason" class="input" maxlength="200" placeholder="Обязательно">
+        <button id="fix-apply" class="btn wide">Пересчитать прогнозы</button>
+        <div id="fix-msg" class="msg hidden"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Прошедшая викторина с правильными ответами -->
+  <div id="quiz-dialog" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="qd-title">
+    <div class="sheet">
+      <div class="sheet-head">
+        <h3 id="qd-title"></h3>
+        <button id="qd-close" class="icon-btn" aria-label="Закрыть">✕</button>
+      </div>
+      <div id="qd-sub" class="muted small"></div>
+      <div id="qd-questions"></div>
+    </div>
+  </div>
+
+  <nav id="nav" class="nav hidden" aria-label="Основные разделы">
+    <button data-tab="quizzes"><span aria-hidden="true">◇</span>Викторины</button>
+    <button data-tab="predictions"><span aria-hidden="true">◎</span>Прогнозы</button>
+    <button data-tab="table"><span aria-hidden="true">≡</span>Таблица</button>
+    <button data-tab="profile"><span aria-hidden="true">○</span>Профиль</button>
+  </nav>
+
+  <script src="../webapp/static/app.js"></script>
+</body>
 </html>

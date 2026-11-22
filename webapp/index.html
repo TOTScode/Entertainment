@@ -2,7 +2,8 @@
 <html lang="ru">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101712">
   <title>TOTS</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <link rel="stylesheet" href="static/style.css">
@@ -19,21 +20,23 @@
 
     <!-- Викторины -->
     <section id="tab-quizzes" class="tab hidden">
+      <div class="page-heading"><h1>Викторины</h1><p>Проверь свои футбольные знания</p></div>
       <!-- Квалификация в финал сезона: видна всегда -->
       <div id="qualify" class="card qualify">
-        <div class="qualify-head"><b>🏆 Финал сезона</b><span id="qualify-num"></span></div>
-        <div class="progress"><div id="qualify-bar"></div></div>
+        <div class="qualify-head"><b>Путь в финал</b><span id="qualify-num"></span></div>
+        <div id="qualify-progress" class="progress" role="progressbar" aria-label="Прогресс квалификации" aria-valuemin="0" aria-valuemax="100"><div id="qualify-bar"></div></div>
         <div id="qualify-text" class="muted small"></div>
+        <details class="disclosure"><summary>Условия финала</summary><p class="muted small">Наберите 100 BIST для квалификации. Призы получат три лучших участника финальной викторины. Дополнительные BIST не дают преимуществ в финале.</p></details>
       </div>
       <div id="quiz-current"><div class="card muted">Загрузка…</div></div>
-      <div id="quiz-past-card" class="card hidden">
-        <h3>Прошлые викторины</h3>
+      <details id="quiz-past-card" class="card disclosure hidden">
+        <summary>Прошлые викторины</summary>
         <ul id="quiz-past" class="list"></ul>
-      </div>
+      </details>
 
       <!-- Управление викторинами: только администраторам -->
-      <div id="quiz-admin" class="card hidden">
-        <h3>🛠 Викторины</h3>
+      <details id="quiz-admin" class="card disclosure admin-zone hidden">
+        <summary>Управление викторинами</summary>
         <div class="settings-grid">
           <label>Смена раз в, дней<input id="qs-every" class="input" type="number" min="1" max="30" step="1" inputmode="numeric"></label>
           <label>Секунд на вопрос (0 — без таймера)<input id="qs-time" class="input" type="number" min="0" max="3600" step="1" inputmode="numeric"></label>
@@ -46,18 +49,20 @@
         <ul id="qa-queue" class="list"></ul>
 
         <h3 id="qa-form-title" class="mt">Новая викторина</h3>
-        <input id="qa-title" class="input" maxlength="120" placeholder="Название, например «Легенды Ливерпуля»">
+        <label for="qa-title">Название викторины</label>
+        <input id="qa-title" class="input" maxlength="120" placeholder="Например, «Легенды Ливерпуля»">
         <label class="muted small">Награда за правильный ответ, BIST<input id="qa-reward" class="input" type="number" min="0" max="100" step="0.1" inputmode="decimal" value="1"></label>
         <div id="qa-questions"></div>
         <button id="qa-add" class="btn wide ghost">+ Вопрос</button>
         <button id="qa-save" class="btn wide">Добавить в очередь</button>
         <button id="qa-cancel" class="btn wide ghost hidden">Отменить правку</button>
         <div id="qa-msg" class="msg hidden"></div>
-      </div>
+      </details>
     </section>
 
     <!-- Прогнозы -->
     <section id="tab-predictions" class="tab hidden">
+      <div class="page-heading"><h1>Прогнозы</h1><p>Выбери матч и свой исход</p></div>
       <div id="pred-view" class="segmented">
         <button data-view="matches" class="active">Матчи</button>
         <button data-view="mine">Мои прогнозы</button>
@@ -78,6 +83,7 @@
 
     <!-- Таблица -->
     <section id="tab-table" class="tab hidden">
+      <div class="page-heading"><h1>Таблица</h1><p>Рейтинг по точности и числу верных исходов</p></div>
       <div class="segmented" role="tablist">
         <button data-period="all" class="active">Общая</button>
         <button data-period="week">Неделя</button>
@@ -85,15 +91,16 @@
       </div>
       <div class="card board-card">
         <div id="board-note" class="muted small"></div>
-        <div class="board-head"><span>Участник</span><span class="quiz-heading" title="Правильные ответы в викторинах">🧠</span><span class="accuracy-heading" title="Взвешенная оценка исходов">Оценка ↓</span></div>
+        <div class="board-head"><span>Участник</span><span class="quiz-heading" title="Правильные ответы в викторинах">Ответы</span><span class="accuracy-heading" title="Взвешенная оценка исходов">Оценка ↓</span></div>
         <ol id="board" class="board"></ol>
-        <div class="muted board-legend">Оценка = правильные² / все попытки. Все попытки — правильные и неправильные завершённые прогнозы на исход; отменённые и ожидающие результата не учитываются. Например, 80 правильных из 100 попыток дают 64 балла. Оценка доступна после 6 попыток. При равенстве — дата регистрации. 🧠 — ответы в викторинах, на место не влияют. Точный счёт не учитывается.</div>
       </div>
+      <details class="disclosure help-block"><summary>Как считается оценка</summary><p class="muted">Оценка = правильные² / все попытки. Все попытки — завершённые правильные и неправильные прогнозы на исход. Отменённые и ожидающие результата не учитываются.</p><p class="muted">80 правильных из 100 попыток дают 64 балла. Оценка доступна после 6 попыток. При равенстве — дата регистрации. Ответы викторин и точный счёт на место не влияют.</p></details>
       <div id="board-me" class="board-me hidden"></div>
     </section>
 
     <!-- Профиль -->
     <section id="tab-profile" class="tab hidden">
+      <div class="page-heading"><h1>Профиль</h1></div>
       <div class="card profile">
         <div id="avatar" class="avatar"></div>
         <div class="profile-text">
@@ -115,20 +122,27 @@
         </div>
       </div>
 
+      <div class="card history-card">
+        <h2>История операций</h2>
+        <ul id="history" class="list"></ul>
+        <div id="history-more" class="muted small center hidden">Загрузка…</div>
+      </div>
+
       <!-- Дашборд: только администраторам -->
-      <div id="dash" class="card hidden">
-        <h3>📊 Дашборд</h3>
+      <details id="dash" class="card disclosure admin-zone hidden">
+        <summary>Дашборд администратора</summary>
         <div id="dash-period" class="segmented">
           <button data-period="day" class="active">Сегодня</button>
           <button data-period="week">Неделя</button>
           <button data-period="month">Месяц</button>
         </div>
         <div id="dash-body" class="dash"><div class="muted">Загрузка…</div></div>
-      </div>
+      </details>
 
       <!-- Админка: показывается только администраторам -->
-      <div id="admin" class="card hidden">
-        <h3>🛠 Админка</h3>
+      <details id="admin" class="card disclosure admin-zone hidden">
+        <summary>Управление участниками</summary>
+        <label for="admin-q">Найти участника</label>
         <div class="inline">
           <input id="admin-q" class="input" placeholder="ID, @username или имя" autocomplete="off">
           <button id="admin-search" class="btn">Найти</button>
@@ -137,27 +151,23 @@
 
         <div id="admin-form" class="admin-form hidden">
           <div id="admin-target" class="name small-name"></div>
-          <input id="admin-amount" class="input" type="number" step="0.1" inputmode="decimal" placeholder="Сумма: +25 или -2.5">
-          <input id="admin-reason" class="input" maxlength="200" placeholder="Причина (обязательно)">
+          <label for="admin-amount">Изменение баланса, BIST</label>
+          <input id="admin-amount" class="input" type="number" step="0.1" inputmode="decimal" placeholder="Например, +25 или −2.5">
+          <label for="admin-reason">Причина</label>
+          <input id="admin-reason" class="input" maxlength="200" placeholder="Обязательно">
           <button id="admin-apply" class="btn">Изменить баланс</button>
           <div id="admin-msg" class="msg hidden"></div>
         </div>
 
         <h3 class="mt">Действия администраторов</h3>
         <ul id="admin-audit" class="list"><li class="muted">Пока пусто</li></ul>
-      </div>
-
-      <div class="card">
-        <h3>История</h3>
-        <ul id="history" class="list"></ul>
-        <div id="history-more" class="muted small center hidden">Загрузка…</div>
-      </div>
+      </details>
     </section>
   </main>
 
   <!-- Профиль другого участника -->
-  <div id="user-dialog" class="overlay hidden" role="dialog" aria-modal="true">
-    <div class="sheet">
+  <div id="user-dialog" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="u-name">
+    <div class="sheet" tabindex="-1">
       <div class="sheet-head">
         <span></span>
         <button id="user-close" class="icon-btn" aria-label="Закрыть">✕</button>
@@ -183,8 +193,10 @@
       <div id="u-admin" class="u-admin hidden">
         <h3>🛠 Админка</h3>
         <div class="muted small">Telegram ID: <span id="u-id"></span></div>
-        <input id="u-amount" class="input" type="number" step="0.1" inputmode="decimal" placeholder="Сумма: +25 или -2.5">
-        <input id="u-reason" class="input" maxlength="200" placeholder="Причина (обязательно)">
+        <label for="u-amount">Изменение баланса, BIST</label>
+        <input id="u-amount" class="input" type="number" step="0.1" inputmode="decimal" placeholder="Например, +25 или −2.5">
+        <label for="u-reason">Причина</label>
+        <input id="u-reason" class="input" maxlength="200" placeholder="Обязательно">
         <button id="u-apply" class="btn wide">Изменить баланс</button>
         <div id="u-msg" class="msg hidden"></div>
         <h3 class="mt">История операций</h3>
@@ -211,6 +223,7 @@
       <div id="bet-current" class="bet-current hidden"></div>
       <div id="bet-form" class="hidden">
         <div class="stake-row">
+          <label for="bet-stake">Сумма прогноза, BIST</label>
           <input id="bet-stake" class="input" type="number" min="1" max="100" step="1" inputmode="numeric" placeholder="Ставка, BIST">
           <div class="quick">
             <button data-stake="5">5</button><button data-stake="10">10</button><button data-stake="25">25</button><button data-stake="50">50</button><button data-stake="100">100</button>
@@ -221,16 +234,17 @@
       </div>
       <button id="bet-cancel" class="btn wide ghost hidden">Отменить прогноз</button>
       <div id="bet-msg" class="msg hidden"></div>
-      <p class="muted small rules">Вес прогноза фиксируется в момент прогноза: при выигрыше ставка умножается на него. На матч — один прогноз: на исход или на точный счёт. Учитывается только основное время. Изменить или отменить прогноз можно до начала матча, не чаще раза в 5 минут.</p>
+      <p class="muted small rules">Один прогноз на матч. Приём до начала матча. Замена или отмена — не чаще раза в 5 минут.</p>
+      <details class="disclosure"><summary>Все правила прогноза</summary><p class="muted small">Вес фиксируется при подтверждении; при выигрыше ставка умножается на него. Можно выбрать исход или точный счёт. Учитывается только основное время. Новый прогноз заменит предыдущий на этот матч.</p></details>
 
       <!-- Исправление счёта: только администраторам, только для завершённых матчей -->
       <div id="bet-admin" class="u-admin hidden">
         <h3>🛠 Исправить счёт</h3>
         <div class="inline">
-          <input id="fix-home" class="input" type="number" min="0" max="30" step="1" inputmode="numeric" placeholder="Хозяева">
-          <input id="fix-away" class="input" type="number" min="0" max="30" step="1" inputmode="numeric" placeholder="Гости">
+          <label>Хозяева<input id="fix-home" class="input" type="number" min="0" max="30" step="1" inputmode="numeric"></label>
+          <label>Гости<input id="fix-away" class="input" type="number" min="0" max="30" step="1" inputmode="numeric"></label>
         </div>
-        <input id="fix-reason" class="input" maxlength="200" placeholder="Причина (обязательно)">
+        <label for="fix-reason">Причина исправления</label><input id="fix-reason" class="input" maxlength="200" placeholder="Обязательно">
         <button id="fix-apply" class="btn wide">Пересчитать прогнозы</button>
         <div id="fix-msg" class="msg hidden"></div>
       </div>
@@ -249,11 +263,11 @@
     </div>
   </div>
 
-  <nav id="nav" class="nav hidden">
-    <button data-tab="quizzes"><span>🧠</span>Викторины</button>
-    <button data-tab="predictions"><span>⚽️</span>Прогнозы</button>
-    <button data-tab="table"><span>🏆</span>Таблица</button>
-    <button data-tab="profile"><span>👤</span>Профиль</button>
+  <nav id="nav" class="nav hidden" aria-label="Основные разделы">
+    <button data-tab="quizzes"><span aria-hidden="true">◇</span>Викторины</button>
+    <button data-tab="predictions"><span aria-hidden="true">◎</span>Прогнозы</button>
+    <button data-tab="table"><span aria-hidden="true">≡</span>Таблица</button>
+    <button data-tab="profile"><span aria-hidden="true">○</span>Профиль</button>
   </nav>
 
   <script src="static/app.js"></script>
