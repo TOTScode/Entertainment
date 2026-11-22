@@ -1,0 +1,20 @@
+[
+  {
+    "theme": "light",
+    "textOnCard": 15,
+    "secondaryOnCard": 6.49,
+    "secondaryOnCanvas": 5.64,
+    "action": 7.7,
+    "errorOnCard": 6.98,
+    "liveOnCard": 5.91
+  },
+  {
+    "theme": "dark",
+    "textOnCard": 14.17,
+    "secondaryOnCard": 8.98,
+    "secondaryOnCanvas": 10.36,
+    "action": 11.72,
+    "errorOnCard": 9.26,
+    "liveOnCard": 6.24
+  }
+]

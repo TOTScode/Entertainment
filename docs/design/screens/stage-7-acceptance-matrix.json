@@ -1,0 +1,367 @@
+{
+  "date": "2026-11-22",
+  "checks": [
+    {
+      "width": 320,
+      "theme": "light",
+      "tab": "Викторины",
+      "active": "Викторины",
+      "pageWidth": 320,
+      "smallControls": [],
+      "viewport": 320
+    },
+    {
+      "width": 320,
+      "theme": "light",
+      "tab": "Прогнозы",
+      "active": "Прогнозы",
+      "pageWidth": 320,
+      "smallControls": [],
+      "viewport": 320
+    },
+    {
+      "width": 320,
+      "theme": "light",
+      "tab": "Таблица",
+      "active": "Таблица",
+      "pageWidth": 320,
+      "smallControls": [],
+      "viewport": 320
+    },
+    {
+      "width": 320,
+      "theme": "light",
+      "tab": "Профиль",
+      "active": "Профиль",
+      "pageWidth": 320,
+      "smallControls": [],
+      "viewport": 320
+    },
+    {
+      "width": 320,
+      "theme": "dark",
+      "tab": "Викторины",
+      "active": "Викторины",
+      "pageWidth": 320,
+      "smallControls": [],
+      "viewport": 320
+    },
+    {
+      "width": 320,
+      "theme": "dark",
+      "tab": "Прогнозы",
+      "active": "Прогнозы",
+      "pageWidth": 320,
+      "smallControls": [],
+      "viewport": 320
+    },
+    {
+      "width": 320,
+      "theme": "dark",
+      "tab": "Таблица",
+      "active": "Таблица",
+      "pageWidth": 320,
+      "smallControls": [],
+      "viewport": 320
+    },
+    {
+      "width": 320,
+      "theme": "dark",
+      "tab": "Профиль",
+      "active": "Профиль",
+      "pageWidth": 320,
+      "smallControls": [],
+      "viewport": 320
+    },
+    {
+      "width": 375,
+      "theme": "light",
+      "tab": "Викторины",
+      "active": "Викторины",
+      "pageWidth": 375,
+      "smallControls": [],
+      "viewport": 375
+    },
+    {
+      "width": 375,
+      "theme": "light",
+      "tab": "Прогнозы",
+      "active": "Прогнозы",
+      "pageWidth": 375,
+      "smallControls": [],
+      "viewport": 375
+    },
+    {
+      "width": 375,
+      "theme": "light",
+      "tab": "Таблица",
+      "active": "Таблица",
+      "pageWidth": 375,
+      "smallControls": [],
+      "viewport": 375
+    },
+    {
+      "width": 375,
+      "theme": "light",
+      "tab": "Профиль",
+      "active": "Профиль",
+      "pageWidth": 375,
+      "smallControls": [],
+      "viewport": 375
+    },
+    {
+      "width": 375,
+      "theme": "dark",
+      "tab": "Викторины",
+      "active": "Викторины",
+      "pageWidth": 375,
+      "smallControls": [],
+      "viewport": 375
+    },
+    {
+      "width": 375,
+      "theme": "dark",
+      "tab": "Прогнозы",
+      "active": "Прогнозы",
+      "pageWidth": 375,
+      "smallControls": [],
+      "viewport": 375
+    },
+    {
+      "width": 375,
+      "theme": "dark",
+      "tab": "Таблица",
+      "active": "Таблица",
+      "pageWidth": 375,
+      "smallControls": [],
+      "viewport": 375
+    },
+    {
+      "width": 375,
+      "theme": "dark",
+      "tab": "Профиль",
+      "active": "Профиль",
+      "pageWidth": 375,
+      "smallControls": [],
+      "viewport": 375
+    },
+    {
+      "width": 390,
+      "theme": "light",
+      "tab": "Викторины",
+      "active": "Викторины",
+      "pageWidth": 390,
+      "smallControls": [],
+      "viewport": 390
+    },
+    {
+      "width": 390,
+      "theme": "light",
+      "tab": "Прогнозы",
+      "active": "Прогнозы",
+      "pageWidth": 390,
+      "smallControls": [],
+      "viewport": 390
+    },
+    {
+      "width": 390,
+      "theme": "light",
+      "tab": "Таблица",
+      "active": "Таблица",
+      "pageWidth": 390,
+      "smallControls": [],
+      "viewport": 390
+    },
+    {
+      "width": 390,
+      "theme": "light",
+      "tab": "Профиль",
+      "active": "Профиль",
+      "pageWidth": 390,
+      "smallControls": [],
+      "viewport": 390
+    },
+    {
+      "width": 390,
+      "theme": "dark",
+      "tab": "Викторины",
+      "active": "Викторины",
+      "pageWidth": 390,
+      "smallControls": [],
+      "viewport": 390
+    },
+    {
+      "width": 390,
+      "theme": "dark",
+      "tab": "Прогнозы",
+      "active": "Прогнозы",
+      "pageWidth": 390,
+      "smallControls": [],
+      "viewport": 390
+    },
+    {
+      "width": 390,
+      "theme": "dark",
+      "tab": "Таблица",
+      "active": "Таблица",
+      "pageWidth": 390,
+      "smallControls": [],
+      "viewport": 390
+    },
+    {
+      "width": 390,
+      "theme": "dark",
+      "tab": "Профиль",
+      "active": "Профиль",
+      "pageWidth": 390,
+      "smallControls": [],
+      "viewport": 390
+    },
+    {
+      "width": 430,
+      "theme": "light",
+      "tab": "Викторины",
+      "active": "Викторины",
+      "pageWidth": 430,
+      "smallControls": [],
+      "viewport": 430
+    },
+    {
+      "width": 430,
+      "theme": "light",
+      "tab": "Прогнозы",
+      "active": "Прогнозы",
+      "pageWidth": 430,
+      "smallControls": [],
+      "viewport": 430
+    },
+    {
+      "width": 430,
+      "theme": "light",
+      "tab": "Таблица",
+      "active": "Таблица",
+      "pageWidth": 430,
+      "smallControls": [],
+      "viewport": 430
+    },
+    {
+      "width": 430,
+      "theme": "light",
+      "tab": "Профиль",
+      "active": "Профиль",
+      "pageWidth": 430,
+      "smallControls": [],
+      "viewport": 430
+    },
+    {
+      "width": 430,
+      "theme": "dark",
+      "tab": "Викторины",
+      "active": "Викторины",
+      "pageWidth": 430,
+      "smallControls": [],
+      "viewport": 430
+    },
+    {
+      "width": 430,
+      "theme": "dark",
+      "tab": "Прогнозы",
+      "active": "Прогнозы",
+      "pageWidth": 430,
+      "smallControls": [],
+      "viewport": 430
+    },
+    {
+      "width": 430,
+      "theme": "dark",
+      "tab": "Таблица",
+      "active": "Таблица",
+      "pageWidth": 430,
+      "smallControls": [],
+      "viewport": 430
+    },
+    {
+      "width": 430,
+      "theme": "dark",
+      "tab": "Профиль",
+      "active": "Профиль",
+      "pageWidth": 430,
+      "smallControls": [],
+      "viewport": 430
+    }
+  ],
+  "states": [
+    {
+      "state": "empty",
+      "tab": "Викторины",
+      "overflow": false,
+      "text": "Викторины\n\nПроверь свои футбольные знания\n\nПуть в финальную викторину\n72.0 / 100 BIST\nПервый сезон начнётся 1 декабря 2026 года\nУсловия финала\nПравила сезона и финала\nСегодня игры нет\n\nНовая викторина появится здесь в 13:00 по МСК.\n\nПрошлые викторины"
+    },
+    {
+      "state": "empty",
+      "tab": "Прогнозы",
+      "overflow": false,
+      "text": "Прогнозы\n\nВыбери матч и свой исход\n\nBIST начисляются бесплатно. Их нельзя купить, продать, передать, вывести или обменять на деньги, товары и сертификаты.\n\nМатчи\nМои прогнозы\nВсе\nЛига чемпионов\nАПЛ\nПредстоящих матчей пока нет. Матчи с вашими прогнозами доступны в разделе «Мои прогнозы»."
+    },
+    {
+      "state": "empty",
+      "tab": "Таблица",
+      "overflow": false,
+      "text": "Таблица\n\nРейтинг по викторинам и точности ответов\n\nСезон\nЗима 26/27\nПервый сезон начнётся 1 декабря 2026 года\nРейтинг участников сезона по викторинам\nРейтинг появится после начала сезона\n\nЛистайте таблицу вбок, чтобы увидеть все показатели.\n\nКак считаются показатели"
+    },
+    {
+      "state": "empty",
+      "tab": "Профиль",
+      "overflow": false,
+      "text": "Профиль\nТвой ник\n@tots_player\nСтаж 24 дня\nБаланс\n72.0 BIST\nПолучено\n+112.0\nПотрачено\n−40.0\nИстория операций\nПока нет операций\nПриватность и уведомления\nСообщить об ошибке или обратиться по данным\nО приложении"
+    },
+    {
+      "state": "error",
+      "tab": "Викторины",
+      "overflow": false,
+      "text": "Викторины\n\nПроверь свои футбольные знания\n\nПуть в финальную викторину\n72.0 / 100 BIST\nПервый сезон начнётся 1 декабря 2026 года\nУсловия финала\nПравила сезона и финала\n\nДемонстрация ошибки сети. Попробуйте ещё раз.\n\nПопробовать снова"
+    },
+    {
+      "state": "error",
+      "tab": "Прогнозы",
+      "overflow": false,
+      "text": "Прогнозы\n\nВыбери матч и свой исход\n\nBIST начисляются бесплатно. Их нельзя купить, продать, передать, вывести или обменять на деньги, товары и сертификаты.\n\nМатчи\nМои прогнозы\n\nДемонстрация ошибки сети. Попробуйте ещё раз.\n\nПопробовать снова"
+    },
+    {
+      "state": "error",
+      "tab": "Таблица",
+      "overflow": false,
+      "text": "Таблица\n\nРейтинг по викторинам и точности ответов\n\nСезон\nЗима 26/27\nДемонстрация ошибки сети. Попробуйте ещё раз.\nРейтинг участников сезона по викторинам\n\nНе удалось загрузить таблицу\n\nПопробовать снова\n\nЛистайте таблицу вбок, чтобы увидеть все показатели.\n\nКак считаются показатели"
+    },
+    {
+      "state": "error",
+      "tab": "Профиль",
+      "overflow": false,
+      "text": "Профиль\nТвой ник\n@tots_player\nСтаж 24 дня\nБаланс\n72.0 BIST\nПолучено\n+112.0\nПотрачено\n−40.0\nИстория операций\nПриватность и уведомления\nСообщить об ошибке или обратиться по данным\nО приложении"
+    },
+    {
+      "state": "loading",
+      "tab": "Викторины",
+      "overflow": false,
+      "text": "Викторины\n\nПроверь свои футбольные знания\n\nПуть в финальную викторину\n72.0 / 100 BIST\nПервый сезон начнётся 1 декабря 2026 года\nУсловия финала\nПравила сезона и финала\nЗагружаем викторину…"
+    },
+    {
+      "state": "loading",
+      "tab": "Прогнозы",
+      "overflow": false,
+      "text": "Прогнозы\n\nВыбери матч и свой исход\n\nBIST начисляются бесплатно. Их нельзя купить, продать, передать, вывести или обменять на деньги, товары и сертификаты.\n\nМатчи\nМои прогнозы\nЗагружаем матчи…"
+    },
+    {
+      "state": "loading",
+      "tab": "Таблица",
+      "overflow": false,
+      "text": "Таблица\n\nРейтинг по викторинам и точности ответов\n\nСезон\nЗима 26/27\nРейтинг участников сезона по викторинам\nЗагружаем участников…\n\nЛистайте таблицу вбок, чтобы увидеть все показатели.\n\nКак считаются показатели"
+    },
+    {
+      "state": "loading",
+      "tab": "Профиль",
+      "overflow": false,
+      "text": "Профиль\nТвой ник\n@tots_player\nСтаж 24 дня\nБаланс\n72.0 BIST\nПолучено\n+112.0\nПотрачено\n−40.0\nИстория операций\nПриватность и уведомления\nСообщить об ошибке или обратиться по данным\nО приложении"
+    }
+  ]
+}

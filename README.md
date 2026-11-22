@@ -15,7 +15,7 @@
 
 ## Этап 7 — дизайн и удобство
 
-[План и чеклист этапа 7](docs/stage-7.md) · [задача #8](https://github.com/TOTScode/Entertainment/issues/8). Закрыты **7.1 — аудит, сценарии и макеты** и **7.2 — единая система оформления**. [Спецификация](docs/design-spec.md), [снимки экранов](docs/design/screens/README.md). Проверка реальных Telegram-клиентов остаётся в 7.8.
+[План и чеклист этапа 7](docs/stage-7.md) · [задача #8](https://github.com/TOTScode/Entertainment/issues/8). Закрыты **7.1–7.7**: проектирование, оформление, навигация, четыре раздела и состояния интерфейса. [Приёмка и оставшиеся проверки](docs/stage-7-acceptance.md). [Спецификация](docs/design-spec.md), [снимки экранов](docs/design/screens/README.md). Проверка реальных Telegram-клиентов остаётся в 7.8.
 
 ## Хостинг на Cloudflare Workers
 

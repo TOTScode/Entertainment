@@ -60,3 +60,5 @@ body.dialog-open{overflow:hidden}.brow .who:hover{text-decoration:underline;text
 .icon-success{color:var(--accent)}.icon-error{color:var(--bad)}
 .icon-btn .ui-icon{margin:0;vertical-align:middle;width:18px;height:18px}
 .q-timer .ui-icon{width:15px;height:15px;vertical-align:-3px}
+
+.table-scroll:has(.rating-table.is-empty)+.table-hint{display:none}

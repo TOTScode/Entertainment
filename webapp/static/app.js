@@ -20,6 +20,7 @@ let me = null;
 let adminTarget = null;
 let historyNext = undefined; // undefined — ещё не грузили, null — больше нет
 let historyLoading = false;
+let historyFailed = false;
 let clockSkew = 0;
 const serverNow = () => Date.now() / 1000 + clockSkew;
 
@@ -73,6 +74,15 @@ async function api(path, options = {}) {
   // Сервер присылает своё время, чтобы таймер ожидания не зависел от часов телефона
   if (typeof data.now === "number") clockSkew = data.now - Date.now() / 1000;
   return data;
+}
+
+function keyboardAction(element, action) {
+  element.tabIndex = 0;
+  element.setAttribute("role", "button");
+  element.onclick = action;
+  element.onkeydown = event => {
+    if (event.key === "Enter" || event.key === " ") { event.preventDefault(); action(); }
+  };
 }
 
 function showError(text) {
@@ -399,6 +409,10 @@ async function loadHistory() {
   if (historyLoading || historyNext === null) return;
   historyLoading = true;
   const more = $("history-more");
+  historyFailed = false;
+  more.textContent = "Загружаем историю…";
+  more.setAttribute("role", "status");
+  more.classList.remove("hidden");
   try {
     const q = historyNext ? `?before=${historyNext}` : "";
     const data = await api(`/api/history${q}`);
@@ -408,7 +422,9 @@ async function loadHistory() {
     if (!list.children.length) list.innerHTML = '<li class="muted">Пока нет операций</li>';
     more.classList.toggle("hidden", historyNext === null);
   } catch (e) {
-    more.textContent = e.message;
+    historyFailed = true;
+    showRetry(more, e.message, loadHistory);
+    more.classList.remove("hidden");
   } finally {
     historyLoading = false;
   }
@@ -417,6 +433,7 @@ async function loadHistory() {
 function resetHistory() {
   $("history").innerHTML = "";
   historyNext = undefined;
+  historyFailed = false;
   loadHistory();
 }
 
@@ -808,11 +825,17 @@ async function loadMine(reset = false) {
   if (reset) {
     list.innerHTML = "";
     mineNext = undefined;
+    const loading = document.createElement("li");
+    loading.className = "muted";
+    loading.setAttribute("role", "status");
+    loading.textContent = "Загружаем прогнозы…";
+    list.append(loading);
   }
   const scope = mineScope;
   try {
     const data = await api(`/api/predictions?scope=${scope}${mineNext ? `&before=${mineNext}` : ""}`);
     if (scope !== mineScope) return;
+    if (reset) list.replaceChildren();
     for (const p of data.items) {
       const li = document.createElement("li");
       li.className = "hist pred-item";
@@ -830,7 +853,7 @@ async function loadMine(reset = false) {
       li.updateTiming = () => live.classList.toggle("hidden", p.status !== "active" || !matchIsLive(p.match));
       li.updateTiming();
       li.appendChild(label);
-      li.onclick = () => openBet({ ...p.match, my: [] }, p.market);
+      keyboardAction(li, () => openBet({ ...p.match, my: [] }, p.market));
       list.appendChild(li);
     }
     mineNext = data.next;
@@ -842,8 +865,9 @@ async function loadMine(reset = false) {
     list.innerHTML = "";
     const li = document.createElement("li");
     li.className = "muted";
-    li.textContent = e.message;
+    showRetry(li, e.message, () => loadMine(true));
     list.appendChild(li);
+    $("mine-more").classList.add("hidden");
   }
 }
 
@@ -1288,7 +1312,7 @@ function renderQuiz() {
     li.innerHTML = "<span></span><b></b>";
     li.firstChild.textContent = p.title;
     li.lastChild.textContent = `${p.right} / ${p.total}`;
-    li.onclick = () => openPastQuiz(p.id);
+    keyboardAction(li, () => openPastQuiz(p.id));
     past.appendChild(li);
   }
   $("quiz-past-card").classList.toggle("hidden", !quiz.past.length);
@@ -1644,7 +1668,7 @@ async function init() {
   initPredictions();
   initQuizzes();
   // Подгрузка истории при прокрутке до конца списка
-  new IntersectionObserver(([e]) => e.isIntersecting && loadHistory()).observe($("history-more"));
+  new IntersectionObserver(([e]) => e.isIntersecting && !historyFailed && loadHistory()).observe($("history-more"));
   loadHistory();
   document.querySelectorAll("#nav button").forEach((b) => (b.onclick = () => openTab(b.dataset.tab)));
   $("loading").classList.add("hidden");
@@ -2035,7 +2059,8 @@ new MutationObserver(() => {
   } else if (!next && activeSheet) {
     activeSheet = null;
     document.body.classList.remove("dialog-open");
-    if (focusedBeforeSheet?.isConnected) focusedBeforeSheet.focus();
+    const returnTarget = focusedBeforeSheet?.isConnected ? focusedBeforeSheet : document.querySelector('#nav [aria-current="page"]');
+    returnTarget?.focus();
   } else if (next && !next.contains(document.activeElement)) {
     focusableIn(next)[0]?.focus();
   }
