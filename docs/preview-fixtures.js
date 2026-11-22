@@ -6,7 +6,8 @@
   const admin = params.get("role") === "admin";
   const now = () => Math.floor(Date.now() / 1000);
   let balance = 72;
-  const profile = () => ({id:1,name:"Твой ник",username:"tots_player",registered_at:now()-86400*24,balance,is_admin:admin,is_new:false,photo_url:null,stats:{earned:112,spent:40}});
+  const photo = params.get('avatar') === 'none' ? null : params.get('avatar') === 'broken' ? 'design/missing-avatar.png' : 'design/demo-avatar.svg';
+  const profile = () => ({id:1,name:"Твой ник",username:"tots_player",registered_at:now()-86400*24,balance,is_admin:admin,is_new:false,photo_url:photo,stats:{earned:112,spent:40}});
   const settings={time_limit:60,attempts:1,every_days:1};
   const questions=[{id:1,opened:false,done:false,correct:false,attempts_left:1},{id:2,opened:false,done:false,correct:false,attempts_left:1},{id:3,opened:true,done:true,correct:true,answer:"Милан",text:"Какой клуб называют россонери?",attempts_left:0}];
   const texts={1:"Какой клуб выиграл Лигу чемпионов в 2005 году?",2:"Как называется домашний стадион «Ливерпуля»?"};

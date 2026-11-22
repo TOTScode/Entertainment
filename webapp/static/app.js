@@ -125,6 +125,21 @@ function formatDate(ts) {
 }
 
 function renderProfile() {
+  const navPhoto = $("nav-profile-photo");
+  const navPlaceholder = $("nav-profile-placeholder");
+  navPhoto.onload = () => { navPhoto.hidden = false; navPlaceholder.classList.add("hidden"); };
+  navPhoto.onerror = () => { navPhoto.hidden = true; navPlaceholder.classList.remove("hidden"); };
+  if (me.photo_url) {
+    if (navPhoto.getAttribute("src") !== me.photo_url) {
+      navPhoto.hidden = true;
+      navPlaceholder.classList.remove("hidden");
+      navPhoto.src = me.photo_url;
+    }
+  } else {
+    navPhoto.removeAttribute("src");
+    navPhoto.hidden = true;
+    navPlaceholder.classList.remove("hidden");
+  }
   $("name").textContent = me.name;
   $("username").textContent = me.username ? "@" + me.username : "";
   const avatar = $("avatar");
