@@ -255,11 +255,11 @@ test("kickoff closes player forecasts while active forecasts survive LIVE and aw
     assert.equal(rows.items[0].status,"active");
     assert.equal(rows.items[0].match.live,time<NOW+6301);
   }
-  assert.equal((await getMatch(db,1,id,NOW+1,{admin:true})).open,true);
+  assert.equal((await getMatch(db,1,id,NOW+1,{admin:true})).open,false);
 });
 
 
-test("match feed contains only upcoming matches; personal history and admin access are retained", async () => {
+test("match feed contains only upcoming matches; personal history retained and admin feed also excludes past matches", async () => {
   const past = await addMatch({start:NOW-60,op:"past"});
   const future = await addMatch({start:NOW+3600,op:"future"});
   const ended = await addMatch({start:NOW+7200,op:"ended"});
@@ -267,6 +267,16 @@ test("match feed contains only upcoming matches; personal history and admin acce
   const list = await listMatches(db,1,{now:NOW});
   assert.deepEqual(list.matches.map(m => m.id),[future]);
   const admin = await listMatches(db,1,{now:NOW,admin:true});
-  assert.ok(admin.matches.some(m => m.id===past));
-  assert.ok(admin.matches.some(m => m.id===ended));
+  assert.ok(!admin.matches.some(m => m.id===past));
+  assert.ok(!admin.matches.some(m => m.id===ended));
+});
+
+test("kickoff is closed to administrators too, including forged direct database writes", async () => {
+  const id=await addMatch({start:NOW+1});
+  for(const time of [NOW+1,NOW+2]) {
+    await assert.rejects(placePrediction(db,1,{match_id:id,market:'1x2',outcome:'1',stake:1},time,{admin:true}),/закрыт/);
+    assert.equal((await listMatches(db,1,{now:time,admin:true})).matches.length,0);
+    assert.throws(()=>db.raw.prepare("INSERT INTO predictions(user_id,match_id,market,outcome,stake,price,status,created_at,updated_at,is_admin_test) VALUES(1,?,'1x2','1',10000,2,'active',?,?,1)").run(id,time,time),/match_closed/);
+  }
+  assert.equal(balance(1),100);
 });

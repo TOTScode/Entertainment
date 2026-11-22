@@ -276,8 +276,8 @@ test('admin prediction exception is server-authorized; forged flags fail; normal
   env.DB.raw.prepare("INSERT INTO odds VALUES(?,'1x2','1',2)").run(old);
   const payload={match_id:old,market:'1x2',outcome:'1',stake:1,is_admin_test:true,admin:true};
   assert.equal((await call('/api/predictions',player,{method:'POST',body:payload})).status,409);
-  const result=await call('/api/predictions',admin,{method:'POST',body:payload});assert.equal(result.status,200);assert.equal(result.data.balance,11);assert.equal(result.data.prediction.is_admin_test,true);
-  assert.equal((await call('/api/matches/'+old,admin)).data.open,true);assert.equal((await call('/api/matches/'+old,player)).data.open,false);
+  const result=await call('/api/predictions',admin,{method:'POST',body:payload});assert.equal(result.status,409);
+  assert.equal((await call('/api/matches/'+old,admin)).data.open,false);assert.equal((await call('/api/matches/'+old,player)).data.open,false);
   const future=env.DB.raw.prepare("INSERT INTO matches(tournament,home,away,start_time,odds_updated_at,updated_at) VALUES('PL','C','D',?,?,?) RETURNING *").get(clock+60,clock,clock);
   env.DB.raw.prepare("INSERT INTO odds VALUES(?,'1x2','1',2)").run(future.id);
   const real=await call('/api/predictions',player,{method:'POST',body:{...payload,match_id:future.id}});assert.equal(real.status,200);assert.equal(real.data.prediction.is_admin_test,false);

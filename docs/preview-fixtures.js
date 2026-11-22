@@ -15,7 +15,7 @@
   const questions=[{id:1,opened:false,done:false,correct:false,attempts_left:1},{id:2,opened:false,done:false,correct:false,attempts_left:1},{id:3,opened:true,done:true,correct:true,answer:"Милан",text:"Какой клуб называют россонери?",attempts_left:0}];
   const texts={1:"Какой клуб выиграл Лигу чемпионов в 2005 году?",2:"Как называется домашний стадион «Ливерпуля»?"};
   const quiz = () => ({now:now(),qualify:100,settings,current:state==='empty'?null:{id:1,title:"Вечера Лиги чемпионов",reward:1,ends_at:now()+7200,questions},past:[{id:2,title:"Легенды футбола",right:4,total:5}]});
-  const match = {id:1,tournament:"CL",tournament_name:"Лига чемпионов",home:state==='long'?"Спортивный клуб объединённой университетской команды Северного района":"Арсенал",away:state==='long'?"Футбольная академия международного спортивного сообщества":"Интер",start_time:now()+(state==='live'?-1800:5400),status:"scheduled",open:admin||(state!=='live'&&!pending()),admin_mode:admin,has_score:true,score:null,my:[]};
+  const match = {id:1,tournament:"CL",tournament_name:"Лига чемпионов",home:state==='long'?"Спортивный клуб объединённой университетской команды Северного района":"Арсенал",away:state==='long'?"Футбольная академия международного спортивного сообщества":"Интер",start_time:now()+(state==='live'?-1800:5400),status:"scheduled",open:state!=='live'&&(admin||!pending()),admin_mode:admin,has_score:true,score:null,my:[]};
   const odds={"1x2":{"1":2.1,"X":3.2,"2":3.6},score:{"1:0":8,"1:1":6.5,"0:1":10,"2:0":11,"2:1":8.5,"0:2":15,"2:2":12}};
   if(state==='live')match.my=[{id:1,is_admin_test:admin,status:'active',market:'1x2',outcome:'1',stake:10,price:2.1,payout:21,next_change_at:0}];
   const players=[{id:2,name:'Северная трибуна',quizzes:8,quiz_percent:80,predictions:15,prediction_percent:60,qualified:true},{id:1,name:'Твой ник',quizzes:6,quiz_percent:72,predictions:10,prediction_percent:80,qualified:false},{id:3,name:'Голос стадиона',quizzes:5,quiz_percent:75,predictions:12,prediction_percent:58,qualified:false},{id:4,name:'Новый игрок',quizzes:0,quiz_percent:null,predictions:0,prediction_percent:null,qualified:false}].sort((a,b)=>b.quizzes*(b.quiz_percent||0)-a.quizzes*(a.quiz_percent||0)||a.name.localeCompare(b.name,'ru')||a.id-b.id).map((p,i)=>({...p,rank:i+1}));
@@ -51,7 +51,7 @@
     if(path==='/api/matches')return response({now:now(),tournaments:[{code:'CL',name:'Лига чемпионов'},{code:'PL',name:'АПЛ'}],matches:state==='empty'||url.searchParams.get('t')==='PL'?[]:[{...match,odds:odds['1x2']}]});
     if(path==='/api/matches/1')return response({...match,odds});
     if(path==='/api/predictions'&&options.method==='POST'){
-      if(!admin&&!match.open)return response({error:'Приём прогнозов ещё не открыт'},409);
+      if(!match.open||match.start_time<=now())return response({error:'Приём прогнозов ещё не открыт'},409);
       const stake=body.stake;if(!Number.isInteger(stake)||stake<1||stake>100)return response({error:'Введите целую сумму от 1 до 100 BIST'},400);
       const previous=match.my[0];if(stake>balance+(previous?.stake||0))return response({error:'Недостаточно BIST'},409);
       balance+=previous?.stake||0;balance-=stake;

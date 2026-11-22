@@ -89,67 +89,25 @@ test("only winter 26/27 exists before launch; no qualification or ranks until De
   );
 });
 
-test("admin may predict closed/stale/cancelled events on ordinary balance; all such forecasts excluded from season stats", async () => {
-  const db = createDb(),
-    now = START + 86400;
-  addUser(db, 1, now);
-  addUser(db, 2, now);
-  await ensureCalendar(db, now);
-  const finished = match(db, now, now - 999999, "finished");
-  await assert.rejects(
-    placePrediction(
-      db,
-      2,
-      { match_id: finished.id, market: "1x2", outcome: "1", stake: 1, is_admin_test: true, admin: true },
-      now,
-    ),
-    /закрыт/,
-  );
-  const win = await placePrediction(
-    db,
-    1,
-    { match_id: finished.id, market: "1x2", outcome: "1", stake: 1 },
-    now,
-    { admin: true },
-  );
-  assert.equal(win.prediction.is_admin_test, true);
-  assert.equal(win.prediction.status, "won");
-  assert.equal(win.balance, 11);
-  const detail = await getMatch(db, 1, finished.id, now, { admin: true });
-  assert.equal(detail.open, true);
-  assert.equal(detail.admin_mode, true);
-  assert.equal((await getMatch(db, 2, finished.id, now)).open, false);
-  const cancelled = match(db, now, now - 999999, "cancelled");
-  const refund = await placePrediction(
-    db,
-    1,
-    { match_id: cancelled.id, market: "1x2", outcome: "1", stake: 2 },
-    now,
-    { admin: true },
-  );
-  assert.equal(refund.prediction.status, "refunded");
-  assert.equal(refund.balance, 11);
-  const s = calendarSeason(now),
-    future = match(db, now, s.ends_at + 1000);
-  const active = await placePrediction(
-    db,
-    1,
-    { match_id: future.id, market: "1x2", outcome: "1", stake: 2 },
-    now,
-    { admin: true },
-  );
-  assert.equal(active.prediction.next_change_at, now);
-  await assert.rejects(cancelPrediction(db, 1, active.prediction.id, now + 1), /права администратора/);
-  assert.equal((await cancelPrediction(db, 1, active.prediction.id, now + 1, { admin: true })).balance, 11);
-  assert.ok((await listMatches(db, 1, { now, admin: true })).matches.some((m) => m.id === finished.id));
-  assert.ok(!(await listMatches(db, 2, { now })).matches.some((m) => m.id === finished.id));
-  const stats = await participantStats(db, { from: START, to: now + 2 });
-  assert.equal(stats.get(1)?.predictions || 0, 0);
-  assert.equal(balance(db, 1), 11);
-  assert.equal(
-    db.raw.prepare("SELECT COUNT(*) n FROM content_versions WHERE kind='admin_prediction'").get().n,
-    3,
-  );
+test("both roles see only future matches and cannot predict started or completed events", async () => {
+  const db=createDb(), now=START+86400;
+  addUser(db,1,now);addUser(db,2,now);await ensureCalendar(db,now);
+  for(const status of ["scheduled","finished","cancelled"]){
+    const old=match(db,now,now-1,status);
+    for(const admin of [false,true]){
+      assert.equal((await getMatch(db,1,old.id,now,{admin})).open,false);
+      await assert.rejects(placePrediction(db,1,{match_id:old.id,market:"1x2",outcome:"1",stake:1},now,{admin}),/закрыт/);
+      assert.ok(!(await listMatches(db,1,{now,admin})).matches.some(m=>m.id===old.id));
+    }
+  }
+  const s=calendarSeason(now),future=match(db,now,s.ends_at+1000);
+  const active=await placePrediction(db,1,{match_id:future.id,market:"1x2",outcome:"1",stake:2},now,{admin:true});
+  assert.equal(active.prediction.is_admin_test,true);
+  assert.equal(active.prediction.next_change_at,now);
+  await assert.rejects(cancelPrediction(db,1,active.prediction.id,now+1),/права администратора/);
+  assert.equal((await cancelPrediction(db,1,active.prediction.id,now+1,{admin:true})).balance,10);
+  assert.equal((await participantStats(db,{from:START,to:now+2})).get(1)?.predictions||0,0);
+  assert.equal(balance(db,1),10);
 });
 
 test("admin future forecast survives season boundary, credits ordinary balance but not seasonal statistics", async () => {
@@ -187,47 +145,23 @@ test("admin future forecast survives season boundary, credits ordinary balance b
   );
 });
 
-test("concurrent result cannot duplicate admin refund or leave replacement unsettled on a finished event", async () => {
-  for (const operation of ["cancel", "replace"]) {
-    const db = createDb(),
-      now = START + 86400;
-    addUser(db, 1, now);
-    await ensureCalendar(db, now);
-    const m = match(db, now, now + 1);
-    const placed = await placePrediction(
-      db,
-      1,
-      { match_id: m.id, market: "1x2", outcome: "1", stake: 1 },
-      now,
-      { admin: true },
-    );
-    const batch = db.batch.bind(db);
-    let settled = false;
-    db.batch = async (statements) => {
-      if (!settled) {
-        settled = true;
-        await settleMatch({ ...db, batch }, m, [1, 0], now + 2);
+test("concurrent result closes admin cancellation and replacement without extra refunds", async () => {
+  for (const operation of ["cancel","replace"]) {
+    const db=createDb(),now=START+86400;
+    addUser(db,1,now);await ensureCalendar(db,now);
+    const m=match(db,now,now+10);
+    const placed=await placePrediction(db,1,{match_id:m.id,market:"1x2",outcome:"1",stake:1},now,{admin:true});
+    const batch=db.batch.bind(db);let settled=false;
+    db.batch=async statements=>{
+      if(!settled && statements.some(st=>/UPDATE predictions|INSERT INTO predictions/.test(st.sql))){
+        settled=true;await settleMatch({...db,batch},m,[1,0],now+1);
       }
       return batch(statements);
     };
-    if (operation === "cancel") {
-      await assert.rejects(
-        cancelPrediction(db, 1, placed.prediction.id, now + 3, { admin: true }),
-        /уже изменился/,
-      );
-      assert.equal(balance(db, 1), 11);
-    } else {
-      const replacement = await placePrediction(
-        db,
-        1,
-        { match_id: m.id, market: "1x2", outcome: "1", stake: 2 },
-        now + 3,
-        { admin: true },
-      );
-      assert.equal(replacement.replaced, false);
-      assert.equal(replacement.prediction.status, "won");
-      assert.equal(balance(db, 1), 13);
-    }
-    assert.equal(db.raw.prepare("SELECT COUNT(*) n FROM transactions WHERE type='refund'").get().n, 0);
+    const action=operation==="cancel"?cancelPrediction(db,1,placed.prediction.id,now+1,{admin:true}):placePrediction(db,1,{match_id:m.id,market:"1x2",outcome:"1",stake:2},now+1,{admin:true});
+    await assert.rejects(action,/закрыт|уже изменился/);
+    assert.equal(balance(db,1),11);
+    assert.equal(db.raw.prepare("SELECT COUNT(*) n FROM transactions WHERE type='refund'").get().n,0);
+    assert.equal(db.raw.prepare("SELECT COUNT(*) n FROM predictions").get().n,1);
   }
 });

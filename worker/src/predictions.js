@@ -37,6 +37,9 @@ export const isOpen = (m, now) =>
   m.odds_updated_at != null &&
   m.odds_updated_at >= now - ODDS_FRESH;
 
+export const canPredictMatch = (m, now, admin = false) =>
+  m.status === "scheduled" && m.start_time > now && (admin || isOpen(m, now));
+
 const tournamentName = (code) => TOURNAMENTS.find((t) => t.code === code)?.name || code;
 
 function publicPrediction(p, now, admin = false) {
@@ -73,17 +76,17 @@ function publicMatch(m, now, admin = false) {
     live: matchIsLive(m, now),
     status: m.status,
     score: m.home_score == null ? null : [m.home_score, m.away_score],
-    open: admin || isOpen(m, now),
+    open: canPredictMatch(m, now, admin),
     admin_mode: admin,
   };
 }
 
 // Список матчей с коэффициентами на исход и моими прогнозами — одно обращение к базе
 export async function listMatches(db, userId, { tournament = null, now, admin = false }) {
-  const from = admin ? 0 : now;
+  const from = now;
   const to = admin ? Number.MAX_SAFE_INTEGER : now + AHEAD_DAYS * 86400;
   const t = TOURNAMENTS.some((x) => x.code === tournament) ? tournament : null;
-  const where = `m.start_time BETWEEN ?1 AND ?2 ${admin ? "" : "AND m.start_time > ?1 AND m.status NOT IN ('finished','cancelled')"} ${t ? "AND m.tournament = ?3" : ""}`;
+  const where = `m.start_time BETWEEN ?1 AND ?2 AND m.start_time > ?1 AND m.status NOT IN ('finished','cancelled') ${t ? "AND m.tournament = ?3" : ""}`;
   const params = t ? [from, to, t] : [from, to];
   const [matches, odds, mine] = await db.batch([
     db.prepare(`SELECT m.* FROM matches m WHERE ${where} ORDER BY m.start_time, m.id`).bind(...params),
@@ -243,7 +246,7 @@ export async function placePrediction(
   ]);
   const m = match.results[0];
   if (!m) throw new PredictionError("Матч не найден", 404);
-  if (!admin && !isOpen(m, now)) throw new PredictionError("Приём прогнозов на этот матч закрыт");
+  if (!canPredictMatch(m, now, admin)) throw new PredictionError("Приём прогнозов на этот матч закрыт");
   const price = odd.results[0]?.price;
   if (!price) throw new PredictionError("Этот исход сейчас недоступен", 400);
   const wait = admin ? 0 : cooldownLeft(rows.results, now);

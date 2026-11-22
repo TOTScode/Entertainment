@@ -626,7 +626,7 @@ function matchIsLive(m) {
   return elapsed >= 0 && elapsed < 105 * 60 && !["finished", "cancelled", "postponed"].includes(m.status);
 }
 function matchAcceptsPrediction(m) {
-  return m.open && (m.admin_mode || m.start_time > serverNow());
+  return m.open && m.status === "scheduled" && m.start_time > serverNow();
 }
 function liveTag() {
   const tag = document.createElement("span");
@@ -695,7 +695,7 @@ function predLine(p) {
 function matchCard(m) {
   const card = document.createElement("div");
   card.className = "card match";
-  if (!m.admin_mode) card.dataset.kickoff = m.start_time;
+  card.dataset.kickoff = m.start_time;
   const top = document.createElement("div");
   top.className = "match-top";
   top.innerHTML = "<span></span><span></span>";
@@ -800,7 +800,7 @@ async function loadMatches() {
 function renderMatchList(matches) {
   const list = $("match-list");
   const now = serverNow();
-  const visible = matches.filter(m => m.admin_mode || (m.start_time > now && !["finished","cancelled"].includes(m.status)));
+  const visible = matches.filter(m => m.start_time > now && !["finished","cancelled"].includes(m.status));
   list.replaceChildren();
   if (!visible.length) {
     list.innerHTML = '<div class="card muted">Предстоящих матчей пока нет. Матчи с вашими прогнозами доступны в разделе «Мои прогнозы».</div>';
@@ -909,7 +909,7 @@ function closeBet() {
 
 function renderBet() {
   const m = bet.match;
-  $("bet-timing-rules").textContent = m.admin_mode ? "Один действующий прогноз на матч. Для администратора нет ограничений по времени и ожидания между изменениями. Обычный баланс, без учёта в сезонной статистике." : "Один прогноз на матч. Приём до начала матча. Замена или отмена — не чаще раза в 5 минут.";
+  $("bet-timing-rules").textContent = m.admin_mode ? "Один действующий прогноз на матч. Приём до начала матча; для администратора нет ожидания между изменениями. Обычный баланс, без учёта в сезонной статистике." : "Один прогноз на матч. Приём до начала матча. Замена или отмена — не чаще раза в 5 минут.";
   $("bet-title").textContent = `${m.home} — ${m.away}`;
   $("bet-sub").textContent = `${m.tournament_name} · ${matchDateTime(m.start_time)}`;
   const state = $("bet-state");
