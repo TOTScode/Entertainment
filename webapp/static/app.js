@@ -18,6 +18,7 @@ const $ = (id) => document.getElementById(id);
 const TABS = ["quizzes", "predictions", "table", "profile"];
 let me = null;
 let adminTarget = null;
+let adminBusy = false;
 let historyNext = undefined; // undefined — ещё не грузили, null — больше нет
 let historyLoading = false;
 let historyFailed = false;
@@ -336,9 +337,11 @@ async function loadUserHistory() {
 }
 
 async function userAdjust() {
+  if (adminBusy) return;
   const id = openUserId;
   const btn = $("u-apply");
   btn.disabled = true;
+  adminBusy=true;
   try {
     const res = await api("/api/admin/adjust", {
       method: "POST",
@@ -362,6 +365,7 @@ async function userAdjust() {
   } catch (e) {
     showMsg($("u-msg"), e.message, false);
   } finally {
+    adminBusy=false;
     btn.disabled = false;
   }
 }
@@ -453,35 +457,57 @@ async function adminSearch() {
       const bal = document.createElement("b");
       bal.textContent = `${fmt(u.balance)} BIST`;
       li.append(label, bal);
-      li.onclick = () => {
+      const choose = () => {
+        if (adminBusy) return;
         adminTarget = u;
         list.querySelectorAll("li").forEach((el) => el.classList.toggle("active", el === li));
         $("admin-target").textContent = `${u.name}: ${fmt(u.balance)} BIST`;
+        renderAdminTarget();
         $("admin-form").classList.remove("hidden");
         $("admin-msg").classList.add("hidden");
       };
+      keyboardAction(li, choose);
       list.appendChild(li);
     }
   } catch (e) {
-    list.innerHTML = "";
-    const li = document.createElement("li");
-    li.className = "muted";
-    li.textContent = e.message;
-    list.appendChild(li);
+    showRetry(list, e.message, adminSearch);
   }
 }
 
-async function adminApply() {
+function renderAdminTarget() {
   if (!adminTarget) return;
+  $("admin-target").textContent = adminTarget.name + " · ID " + adminTarget.id + " · " + fmt(adminTarget.balance) + " BIST";
+  $("admin-status").textContent = adminTarget.is_blocked ? "Заблокирован · " + (adminTarget.block_reason || "Причина в журнале") : "Активен";
+  $("admin-block").textContent = adminTarget.is_blocked ? "Разблокировать" : "Заблокировать";
+}
+async function adminUserAction(action) {
+  if (!adminTarget || adminBusy) return;
+  const reason=$("admin-reason").value.trim();
+  if (!reason) { showMsg($("admin-msg"),"Укажите причину",false); $("admin-reason").focus(); return; }
+  adminBusy=true;
+  const buttons=[...document.querySelectorAll("#admin-form button")]; buttons.forEach(b=>b.disabled=true);
+  try {
+    const res=await api("/api/admin/users/action",{method:"POST",body:JSON.stringify({user_id:adminTarget.id,action,reason})});
+    adminTarget=res.user;renderAdminTarget();$("admin-reason").value="";
+    showMsg($("admin-msg"),{block:"Участник заблокирован",unblock:"Участник разблокирован",hide_profile:"Публичный профиль и аватар скрыты"}[action]+". Действие записано в журнал.",true);
+    adminSearch();loadAudit();
+  } catch(e) { showMsg($("admin-msg"),e.message,false); }
+  finally { adminBusy=false; buttons.forEach(b=>b.disabled=false); }
+}
+
+async function adminApply() {
+  if (!adminTarget || adminBusy) return;
   const btn = $("admin-apply");
+  if (!(Number($("admin-amount").value)>0)) { showMsg($("admin-msg"), "Введите положительную сумму", false); return; }
+  adminBusy=true;
   btn.disabled = true;
   try {
     const res = await api("/api/admin/adjust", {
       method: "POST",
-      body: JSON.stringify({ user_id: adminTarget.id, amount: Number($("admin-amount").value), reason: $("admin-reason").value }),
+      body: JSON.stringify({ user_id: adminTarget.id, amount: Number($("admin-amount").value) * ($("admin-mode").value === "remove" ? -1 : 1), reason: $("admin-reason").value }),
     });
     adminTarget = res.user;
-    $("admin-target").textContent = `${res.user.name}: ${fmt(res.user.balance)} BIST`;
+    renderAdminTarget();
     $("admin-amount").value = "";
     $("admin-reason").value = "";
     showMsg($("admin-msg"), "Баланс изменён и записан в журнал", true);
@@ -495,6 +521,7 @@ async function adminApply() {
   } catch (e) {
     showMsg($("admin-msg"), e.message, false);
   } finally {
+    adminBusy=false;
     btn.disabled = false;
   }
 }
@@ -572,6 +599,11 @@ async function loadAudit() {
     list.innerHTML = entries.length ? "" : '<li class="muted">Пока пусто</li>';
     for (const e of entries) {
       const li = document.createElement("li");
+      if (e.action.startsWith("user_")) {
+        const action={user_block:"Блокировка",user_unblock:"Разблокировка",user_hide_profile:"Скрытие публичного профиля"}[e.action]||e.action;
+        li.textContent=`${new Date(e.created_at*1000).toLocaleString("ru-RU")} · ${e.target_name||e.target_user_id}: ${action} · «${e.reason}» · админ ${e.admin_id}`;
+        list.append(li);continue;
+      }
       if (e.action === "match_result") {
         li.textContent =
           `${new Date(e.created_at * 1000).toLocaleString("ru-RU")} · ${e.after.match}: счёт ${e.before.score.join(":")} → ` +
@@ -579,6 +611,7 @@ async function loadAudit() {
         list.appendChild(li);
         continue;
       }
+      if(e.action!=="balance_adjustment"){li.textContent=`${new Date(e.created_at*1000).toLocaleString("ru-RU")} · ${e.action} · «${e.reason}» · админ ${e.admin_id}`;list.append(li);continue;}
       li.textContent =
         `${new Date(e.created_at * 1000).toLocaleString("ru-RU")} · ${e.target_name}: ${signed(e.after.amount)} BIST ` +
         `(${fmt(e.before.balance)} → ${fmt(e.after.balance)}) · «${e.reason}» · админ ${e.admin_id}`;
@@ -626,7 +659,7 @@ function matchIsLive(m) {
   return elapsed >= 0 && elapsed < 105 * 60 && !["finished", "cancelled", "postponed"].includes(m.status);
 }
 function matchAcceptsPrediction(m) {
-  return m.open && m.status === "scheduled" && m.start_time > serverNow();
+  return !me?.is_blocked && m.open && m.status === "scheduled" && m.start_time > serverNow();
 }
 function liveTag() {
   const tag = document.createElement("span");
@@ -1660,6 +1693,9 @@ async function init() {
     $("admin-search").onclick = adminSearch;
     $("admin-q").addEventListener("keydown", (e) => e.key === "Enter" && adminSearch());
     $("admin-apply").onclick = adminApply;
+    $("admin-block").onclick = () => adminUserAction(adminTarget?.is_blocked ? "unblock" : "block");
+    $("admin-hide").onclick = () => adminUserAction("hide_profile");
+    $("admin-view").onclick = () => adminTarget && openUser(adminTarget);
     $("u-apply").onclick = userAdjust;
     $("u-more").onclick = loadUserHistory;
     loadAudit();

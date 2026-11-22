@@ -174,6 +174,7 @@ function cooldownLeft(rows, now) {
 
 function mapDbError(e) {
   const msg = String(e?.message);
+  if (msg.includes("account_blocked")) return new PredictionError("Аккаунт заблокирован",403);
   if (msg.includes("insufficient_balance")) return new PredictionError("Недостаточно BIST");
   if (msg.includes("match_closed")) return new PredictionError("Приём прогнозов на этот матч закрыт");
   if (msg.includes("UNIQUE")) return new PredictionError("Прогноз уже изменился, обновите экран");

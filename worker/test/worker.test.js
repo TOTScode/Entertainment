@@ -47,6 +47,37 @@ async function call(path, user, { method = "GET", body } = {}) {
 
 const alexey = { id: 7, first_name: "Алексей", username: "greendend" };
 
+test("profile flows count only lost stakes and net winnings, including corrected results", async () => {
+  const { placePrediction, settleMatch, cancelMatch, correctionStatements } = await import('../src/predictions.js');
+  const ts = Date.parse('2026-12-10T12:00:00+03:00') / 1000;
+  await call('/api/me', alexey);
+  const stats = async (expected) => {
+    assert.deepEqual((await call('/api/me', alexey)).data.stats, expected);
+    assert.deepEqual((await call('/api/users/7', alexey)).data.stats, expected);
+  };
+  const create = async () => {
+    const match = env.DB.raw.prepare("INSERT INTO matches(tournament,home,away,start_time,odds_updated_at,updated_at) VALUES('PL','A','B',?,?,?) RETURNING *").get(ts+3600,ts,ts);
+    env.DB.raw.prepare("INSERT INTO odds VALUES(?,'1x2','1',3)").run(match.id);
+    await placePrediction(env.DB, 7, {match_id:match.id,market:'1x2',outcome:'1',stake:10}, ts);
+    return match;
+  };
+  const won = await create();
+  await stats({earned:10,spent:0}); // active 10 is reserved, not spent
+  await settleMatch(env.DB, won, [1,0], ts+7200);
+  await stats({earned:30,spent:0}); // signup 10 + profit 20; payout is 30
+  const cancelled = await create();
+  await cancelMatch(env.DB, cancelled, ts+7200);
+  await stats({earned:30,spent:0});
+  const lost = await create();
+  await settleMatch(env.DB, lost, [0,1], ts+7200);
+  await stats({earned:30,spent:10});
+  await env.DB.batch(correctionStatements(env.DB, {...won,settle_version:1}, [0,1], ts+7300));
+  await stats({earned:10,spent:20});
+  await env.DB.batch(correctionStatements(env.DB, {...won,settle_version:2}, [1,0], ts+7400));
+  await stats({earned:30,spent:10});
+  assert.equal(env.DB.raw.prepare("SELECT COUNT(*) n FROM transactions WHERE type='payout_reversal'").get().n,1);
+});
+
 test("без подписи Telegram API недоступно", async () => {
   assert.equal((await call("/api/me")).status, 401);
 });
@@ -285,4 +316,40 @@ test('admin prediction exception is server-authorized; forged flags fail; normal
   const board=(await call('/api/leaderboard',player)).data;
   assert.equal(board.rows.find(r=>r.id===ADMIN).predictions,0);assert.equal(board.rows.find(r=>r.id===7).predictions,1);
  } finally {Date.now=originalNow;}
+});
+
+test('participant moderation: backend authorization, blocking, appeal, unblock and immutable history', async()=>{
+ const admin={id:ADMIN,first_name:'Admin'};await call('/api/me',alexey);await call('/api/me',admin);
+ const path='/api/admin/users/action',payload={user_id:alexey.id,action:'block',reason:'Проверка модерации'};
+ assert.equal((await call(path,alexey,{method:'POST',body:payload})).status,403);
+ assert.equal((await call(path,admin,{method:'POST',body:{...payload,reason:''}})).status,400);
+ assert.equal((await call(path,admin,{method:'POST',body:{...payload,user_id:ADMIN}})).status,409);
+ env.DB.raw.prepare('UPDATE users SET public_profile=1,public_avatar=1 WHERE id=?').run(alexey.id);
+ const count=env.DB.raw.prepare('SELECT COUNT(*) n FROM transactions').get().n;
+ const blocked=await call(path,admin,{method:'POST',body:payload});assert.equal(blocked.status,200);assert.equal(blocked.data.user.is_blocked,true);
+ assert.equal(blocked.data.user.public_profile,false);
+ assert.equal((await call('/api/me',alexey)).data.is_blocked,true);
+ assert.equal((await call('/api/quiz',alexey)).status,403);
+ assert.equal((await call('/api/predictions',alexey,{method:'POST',body:{}})).data.code,'account_blocked');
+ assert.equal((await call('/api/preferences',alexey,{method:'PUT',body:{public_profile:true}})).status,403);
+ assert.equal((await call('/api/history',alexey)).status,200);
+ assert.equal((await call('/api/requests',alexey,{method:'POST',body:{kind:'privacy_question',message:'Проверить блокировку'}})).status,201);
+ assert.throws(()=>env.DB.raw.prepare('UPDATE users SET public_profile=1 WHERE id=?').run(alexey.id),/account_blocked/);
+ assert.equal(env.DB.raw.prepare('SELECT COUNT(*) n FROM transactions').get().n,count);
+ const unblock=await call(path,admin,{method:'POST',body:{...payload,action:'unblock',reason:'Проверка завершена'}});assert.equal(unblock.status,200);assert.equal(unblock.data.user.is_blocked,false);assert.equal(unblock.data.user.public_profile,false);
+ assert.equal((await call('/api/quiz',alexey)).status,200);
+ assert.deepEqual(env.DB.raw.prepare("SELECT action FROM audit_log WHERE action LIKE 'user_%' ORDER BY id").all().map(x=>x.action),['user_block','user_unblock']);
+});
+
+test('hide participant profile preserves history; balance adjustment and audit are atomic',async()=>{
+ const admin={id:ADMIN,first_name:'Admin'};await call('/api/me',alexey);await call('/api/me',admin);
+ env.DB.raw.prepare('UPDATE users SET public_profile=1,public_avatar=1 WHERE id=?').run(alexey.id);
+ const hide=await call('/api/admin/users/action',admin,{method:'POST',body:{user_id:alexey.id,action:'hide_profile',reason:'Просьба участника'}});assert.equal(hide.status,200);assert.equal(hide.data.user.public_avatar,false);
+ assert.equal((await call('/api/admin/adjust',admin,{method:'POST',body:{user_id:alexey.id,amount:2.5,reason:'Награда'}})).data.user.balance,12.5);
+ assert.equal((await call('/api/admin/adjust',admin,{method:'POST',body:{user_id:alexey.id,amount:-1.5,reason:'Исправление'}})).data.user.balance,11);
+ env.DB.raw.exec("CREATE TRIGGER reject_audit BEFORE INSERT ON audit_log BEGIN SELECT RAISE(ABORT,'test audit failure'); END");
+ const count=env.DB.raw.prepare('SELECT COUNT(*) n FROM transactions').get().n;
+ await assert.rejects(call('/api/admin/adjust',admin,{method:'POST',body:{user_id:alexey.id,amount:5,reason:'Rollback test'}}),/test audit failure/);
+ assert.equal(await getBalance(env.DB,alexey.id),11*UNIT);
+ assert.equal(env.DB.raw.prepare('SELECT COUNT(*) n FROM transactions').get().n,count);
 });

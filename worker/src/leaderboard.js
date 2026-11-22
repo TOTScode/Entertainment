@@ -1,4 +1,5 @@
 import { rankParticipants } from "./quiz-ranking.js";
+import { balanceStatisticsColumns } from "./balance-statistics.js";
 import { toBist } from "./money.js";
 import { displayName } from "./users.js";
 import { competitionSeason, FIRST_SEASON_START, SeasonError } from "./seasons.js";
@@ -130,8 +131,7 @@ export async function takeSnapshot(db, ts = Math.floor(Date.now() / 1000)) {
 export async function userStats(db, userId) {
   const row = await db
     .prepare(
-      "SELECT COALESCE(SUM(CASE WHEN amount > 0 THEN amount END), 0) AS earned, " +
-        "COALESCE(-SUM(CASE WHEN amount < 0 THEN amount END), 0) AS spent FROM transactions WHERE user_id = ?",
+      "SELECT " + balanceStatisticsColumns("?1"),
     )
     .bind(userId)
     .first();

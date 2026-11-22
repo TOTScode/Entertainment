@@ -1,7 +1,7 @@
 // Админка: доступ по списку Telegram ID из переменной ADMIN_IDS.
 // Каждое ручное действие пишется в audit_log с причиной и состоянием до и после.
 
-import { addTransaction, getUser, LedgerError, searchUsers, displayName } from "./users.js";
+import { getUser, searchUsers, displayName } from "./users.js";
 import { history } from "./leaderboard.js";
 import { toBist, toUnits } from "./money.js";
 import { correctionStatements } from "./predictions.js";
@@ -67,6 +67,10 @@ const publicUser = (u) => ({
   username: u.username,
   balance: toBist(u.balance),
   created_at: u.created_at,
+  is_blocked: u.blocked_at != null,
+  block_reason: u.block_reason || null,
+  public_profile: Boolean(u.public_profile),
+  public_avatar: Boolean(u.public_avatar),
 });
 
 export async function handleAdmin(request, env, admin, path, json) {
@@ -80,12 +84,37 @@ export async function handleAdmin(request, env, admin, path, json) {
     return json({ users: (await searchUsers(db, q)).map(publicUser) });
   }
 
+
+  if (path === "/api/admin/users/action" && request.method === "POST") {
+    const body=await request.json().catch(()=>({}));
+    const id=Number(body.user_id), action=String(body.action||""), reason=String(body.reason||"").trim();
+    if(!Number.isSafeInteger(id)||id<=0||!["block","unblock","hide_profile"].includes(action)) return json({error:"Выберите участника и действие"},400);
+    if(!reason||reason.length>200) return json({error:"Укажите причину (до 200 символов)"},400);
+    const target=await getUser(db,id);
+    if(!target)return json({error:"Пользователь не найден"},404);
+    if((action==="block"||action==="unblock")&&isAdmin(env,id))return json({error:"Нельзя блокировать администраторов"},409);
+    if((action==="block")===(target.blocked_at!=null)&&action!=="hide_profile")return json({error:action==="block"?"Участник уже заблокирован":"Участник не заблокирован"},409);
+    const blocked=action==="block"?ts:action==="unblock"?null:target.blocked_at;
+    const after={blocked_at:blocked,public_profile:action==="unblock"?Boolean(target.public_profile):false,public_avatar:action==="unblock"?Boolean(target.public_avatar):false};
+    const update=action==="unblock"
+      ? db.prepare("UPDATE users SET blocked_at=NULL,blocked_by=NULL,block_reason=NULL WHERE id=?").bind(id)
+      : action==="hide_profile"
+        ? db.prepare("UPDATE users SET public_profile=0,public_avatar=0 WHERE id=?").bind(id)
+        : db.prepare("UPDATE users SET blocked_at=?,blocked_by=?,block_reason=?,public_profile=0,public_avatar=0,marketing_opt_in=0 WHERE id=?").bind(ts,admin.id,reason,id);
+    await db.batch([
+      db.prepare("INSERT INTO audit_log(admin_id,action,target_user_id,reason,before_data,after_data,created_at) SELECT ?,?,?,?,json_object('blocked_at',blocked_at,'public_profile',public_profile,'public_avatar',public_avatar),?,? FROM users WHERE id=?").bind(admin.id,"user_"+action,id,reason,JSON.stringify(after),ts,id),
+      update,
+    ]);
+    return json({user:publicUser(await getUser(db,id))});
+  }
+
   if (path === "/api/admin/adjust" && request.method === "POST") {
     const body = await request.json().catch(() => ({}));
     const userId = Number(body.user_id);
     const amount = Number(body.amount);
+    if(!Number.isSafeInteger(userId)||userId<=0)return json({error:"Выберите участника"},400);
     const reason = String(body.reason ?? "").trim();
-    if (!reason) return json({ error: "Укажите причину" }, 400);
+    if (!reason || reason.length>200) return json({ error: "Укажите причину (до 200 символов)" }, 400);
     // Можно с одним знаком после запятой: 2.5 BIST
     if (
       !Number.isFinite(amount) ||
@@ -101,23 +130,21 @@ export async function handleAdmin(request, env, admin, path, json) {
     const target = await getUser(db, userId);
     if (!target) return json({ error: "Пользователь не найден" }, 404);
 
-    let tx;
+
+    const operation="admin:"+crypto.randomUUID();
+    let results;
     try {
-      tx = await addTransaction(db, { userId, amount: toUnits(amount), type: "admin_adjustment" });
-    } catch (e) {
-      if (e instanceof LedgerError) return json({ error: e.message }, 409);
+      results=await db.batch([
+        db.prepare("INSERT INTO transactions(user_id,amount,type,ref,created_at) VALUES(?,?,'admin_adjustment',?,?)").bind(userId,toUnits(amount),operation,ts),
+        db.prepare("INSERT INTO audit_log(admin_id,action,target_user_id,reason,before_data,after_data,created_at) SELECT ?,'balance_adjustment',?,?,json_object('balance',(COALESCE(SUM(amount),0)-?)/10000.0),json_object('balance',COALESCE(SUM(amount),0)/10000.0,'amount',?,'transaction_id',(SELECT id FROM transactions WHERE ref=?),'operation_id',?),? FROM transactions WHERE user_id=?").bind(admin.id,userId,reason,toUnits(amount),amount,operation,operation,ts,userId),
+        db.prepare("UPDATE transactions SET ref='audit:'||(SELECT id FROM audit_log WHERE json_extract(after_data,'$.operation_id')=?) WHERE ref=?").bind(operation,operation),
+        db.prepare("SELECT id FROM audit_log WHERE json_extract(after_data,'$.operation_id')=?").bind(operation),
+      ]);
+    } catch(e) {
+      if(String(e.message).includes("insufficient_balance"))return json({error:"Недостаточно BIST"},409);
       throw e;
     }
-    const auditId = await writeAudit(db, {
-      adminId: admin.id,
-      action: "balance_adjustment",
-      targetUserId: userId,
-      reason,
-      before: { balance: toBist(target.balance) },
-      after: { balance: toBist(tx.balance), amount, transaction_id: tx.id },
-    });
-    await db.prepare("UPDATE transactions SET ref = ? WHERE id = ?").bind(`audit:${auditId}`, tx.id).run();
-    return json({ user: publicUser({ ...target, balance: tx.balance }), audit_id: auditId });
+    return json({user:publicUser(await getUser(db,userId)),audit_id:results[3].results[0].id});
   }
 
   // Исправление счёта уже рассчитанного матча: выигрыши пересчитываются, действие пишется в журнал

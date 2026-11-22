@@ -60,6 +60,7 @@ function profile(user, env, isNew) {
     years_in_tots: yearsSince(user.created_at),
     is_new: isNew,
     is_admin: isAdmin(env, user.id),
+    is_blocked: user.blocked_at != null,
   };
 }
 
@@ -68,6 +69,12 @@ async function handleApi(request, env, path) {
   const botToken = (env.BOT_TOKEN || "").trim();
   const tgUser = await validateInitData(request.headers.get("X-Telegram-Init-Data"), botToken);
   if (!tgUser) return json({ error: "Откройте приложение из Telegram" }, 401);
+
+  const protectedAction = (request.method!=="GET" && !["/api/requests","/api/consents"].includes(path)) || path==="/api/quiz" || path.startsWith("/api/quiz/") || path==="/api/matches" || path.startsWith("/api/matches/");
+  if(protectedAction && !isAdmin(env,tgUser.id)) {
+    const moderation=await env.DB.prepare("SELECT blocked_at FROM users WHERE id=?").bind(tgUser.id).first();
+    if(moderation?.blocked_at!=null)return json({error:"Аккаунт заблокирован. Вы можете посмотреть свою историю и обратиться через профиль.",code:"account_blocked"},403);
+  }
   const policy = await activePolicy(env.DB);
   const consentNow = Math.floor(Date.now() / 1000);
   if (path === "/api/consents" && request.method === "POST")

@@ -22,6 +22,8 @@
 
   if(state==='long')players[0].name="УчастникСОченьДлиннымНикомБезПробеловДляПроверкиПереноса";
   const transactions=[{id:3,type:"quiz_reward",amount:1,quiz:"Легенды футбола",created_at:now()-600},{id:2,type:"bet",amount:-10,match:"Арсенал — Интер",market:"1x2",outcome:"1",created_at:now()-86400},{id:1,type:"payout",amount:18,match:"Бавария — Бенфика",market:"1x2",outcome:"1",created_at:now()-86400*2}];
+  const adminUsers=[{id:2,name:"Северная трибуна",username:"north_stand",balance:70,created_at:now()-86400*30,is_blocked:false,public_profile:true,public_avatar:true},{id:1,name:"Твой ник",username:"tots_player",balance:72,created_at:now()-86400*24,is_blocked:false}];
+  const adminAudit=[];
   const handlers = new Map();
   window.Telegram={WebApp:{initData:"local-demo-only",initDataUnsafe:{start_param:params.get('tab')||'quizzes'},get colorScheme(){return theme;},ready(){},expand(){},setHeaderColor(){},setBackgroundColor(){},onEvent(name,fn){handlers.set(name,fn);},HapticFeedback:{notificationOccurred(){}}}};
   const response=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json'}});
@@ -30,6 +32,17 @@
     // Never fall through to a real API, even when a demo handler is missing.
     if(!path.startsWith('/api/'))return response({error:'Недоступно в демонстрации'},404);
     if(path==='/api/me')return response(profile());
+    if(path.startsWith('/api/admin/')&&!admin)return response({error:'Нет доступа'},403);
+    if(path==='/api/admin/users'){const q=(url.searchParams.get('q')||'').toLowerCase().replace('@','');return response({users:adminUsers.filter(u=>[u.id,u.name,u.username].join(' ').toLowerCase().includes(q))});}
+    if(path==='/api/admin/users/action'||path==='/api/admin/adjust'){
+      const b=JSON.parse(options.body),u=adminUsers.find(u=>u.id===b.user_id);if(!u)return response({error:'Пользователь не найден'},404);if(!b.reason?.trim())return response({error:'Укажите причину'},400);
+      const before={balance:u.balance};let action;
+      if(path==='/api/admin/adjust'){if(u.balance+b.amount<0)return response({error:'Недостаточно BIST'},409);u.balance+=b.amount;if(u.id===1)balance=u.balance;action='balance_adjustment';}
+      else{action='user_'+b.action;if(b.action==='block'){if(u.id===1)return response({error:'Нельзя блокировать администраторов'},409);u.is_blocked=true;u.block_reason=b.reason;u.public_profile=u.public_avatar=false;}if(b.action==='unblock'){u.is_blocked=false;u.block_reason=null;}if(b.action==='hide_profile')u.public_profile=u.public_avatar=false;}
+      adminAudit.unshift({id:adminAudit.length+1,admin_id:1,target_user_id:u.id,target_name:u.name,action,reason:b.reason,before,after:{balance:u.balance,amount:b.amount},created_at:now()});return response({user:u});
+    }
+    if(path==='/api/admin/history')return response({items:transactions,next:null});
+
     if(path==='/api/season')return response({season:{id:'2026-winter',name:'Зима 2026–2027',label:'Зима 26/27',starts_at:firstStart,ends_at:firstEnd,cutoff:firstEnd-604800,pending_start:pending(),activation_pending:true},qualified:!pending()&&balance>=100,threshold:100,frozen:false,rules:null,seasons:[{id:'2026-winter',label:'Зима 26/27'}]});
     if(path==='/api/finals')return response({items:[]});
     if(path==='/api/policy')return response({policy:null});
@@ -47,7 +60,7 @@
     if(path==='/api/quizzes/2')return response({title:'Легенды футбола',ended:true,questions:[{id:7,text:'Кто выиграл ЛЧ в 2005 году?',correct:true,answer:'Ливерпуль',answers:['Ливерпуль'],done:true}]});
     if(path==='/api/history')return response({items:state==='empty'?[]:transactions,next:null});
     if(path==='/api/leaderboard')return response({example:(state==='sample'||state==='long'),season:{id:'2026-winter',pending_start:pending()},qualification_frozen:false,sort:'quiz_rating_desc',total:state==='empty'||(pending()&&state!=='sample'&&state!=='long')?0:players.filter(p=>p.id!==1||prefs.public_profile).length,rows:state==='empty'||(pending()&&state!=='sample'&&state!=='long')?[]:players.filter(p=>p.id!==1||prefs.public_profile).map((p,i)=>({...p,rank:i+1})),me:state==='empty'?null:players.find(p=>p.id===1)});
-    if(path==='/api/users/2')return response({...players.find(p=>p.id===2),photo_url:null});
+    if(path==='/api/users/2')return response({...players.find(p=>p.id===2),...adminUsers[0],photo_url:null,stats:{earned:90,spent:20},registered_at:now()-86400*30});
     if(path==='/api/matches')return response({now:now(),tournaments:[{code:'CL',name:'Лига чемпионов'},{code:'PL',name:'АПЛ'}],matches:state==='empty'||url.searchParams.get('t')==='PL'?[]:[{...match,odds:odds['1x2']}]});
     if(path==='/api/matches/1')return response({...match,odds});
     if(path==='/api/predictions'&&options.method==='POST'){
@@ -59,7 +72,7 @@
     if(path==='/api/predictions/1/cancel'){balance+=match.my[0]?.stake||0;match.my=[];return response({balance});}
     if(path==='/api/predictions')return response({items:state==='empty'?[]:match.my.map(p=>({...p,match})),next:null});
     if(path==='/api/admin/quizzes')return response({settings,quizzes:[{...quiz().current,status:'current',players:12,questions:[{id:1,text:texts[1],answers:['Ливерпуль']}]}]});
-    if(path==='/api/admin/audit')return response({entries:[]});
+    if(path==='/api/admin/audit')return response({entries:adminAudit});
     if(path==='/api/admin/dashboard'){
       const period=value=>({day:value,week:value*3,month:value*8,all:value*12});
       return response({bist:{issued:period(42),spent:period(24),by_type:[],total:856},players:{total:24,new:period(2),active:period(8),qualify_bist:100,qualified:3,top_n:3,top_share:32},predictions:{made:period(12),players:period(6),stake:period(70),won:period(5),lost:period(3),payout:period(98),active:{count:4,stake:32}},quizzes:{players:period(12),opened:period(28),correct:period(19),wrong:period(9),queue_until:now()+86400*3}});

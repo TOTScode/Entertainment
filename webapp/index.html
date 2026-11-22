@@ -63,7 +63,6 @@
     <!-- Прогнозы -->
     <section id="tab-predictions" class="tab hidden">
       <div class="page-heading"><h1>Прогнозы</h1><p>Выбери матч и свой исход</p></div>
-      <p class="muted small">BIST начисляются бесплатно. Их нельзя купить, продать, передать, вывести или обменять на деньги, товары и сертификаты.</p>
       <div id="pred-view" class="segmented">
         <button data-view="matches" class="active">Матчи</button>
         <button data-view="mine">Мои прогнозы</button>
@@ -85,7 +84,7 @@
     <!-- Таблица -->
     <section id="tab-table" class="tab hidden">
       <div class="page-heading"><h1>Таблица</h1><p>Рейтинг по викторинам и точности ответов</p></div>
-      <label for="board-season">Сезон</label><select id="board-season" class="input"><option value="">Текущий сезон</option></select>
+      <div class="season-filter"><label for="board-season">Сезон</label><div class="season-picker"><select id="board-season"><option value="">Текущий сезон</option></select><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="m4 6 4 4 4-4"/></svg></div></div>
       <div class="card board-card">
         <div id="board-note" class="muted small"></div>
         <div class="table-scroll" role="region" aria-label="Таблица рейтинга" tabindex="0"><table class="rating-table"><caption class="sr-only">Рейтинг участников сезона по викторинам</caption><thead><tr><th rowspan="2" scope="col" class="place-cell">Место</th><th rowspan="2" scope="col" class="name-cell">Участник</th><th colspan="2" scope="colgroup">Викторины</th><th colspan="2" scope="colgroup">Прогнозы</th></tr><tr><th scope="col">Кол-во</th><th scope="col">Точность</th><th scope="col">Кол-во</th><th scope="col">Точность</th></tr></thead><tbody id="board"></tbody></table></div><p class="table-hint muted small">Листайте таблицу вбок, чтобы увидеть все показатели.</p>
@@ -116,6 +115,7 @@
           <div><div class="muted">Получено</div><b id="stat-earned" class="plus">—</b></div>
           <div><div class="muted">Потрачено</div><b id="stat-spent" class="minus">—</b></div>
         </div>
+        <details class="disclosure help-block"><summary>О Bist</summary><p class="muted small">Bist нельзя купить, продать, передать, вывести или обменять на деньги, товары и сертификаты. Их можно получить только с помощью своих знаний.</p></details>
       </div>
 
       <div class="card history-card">
@@ -161,11 +161,19 @@
 
         <div id="admin-form" class="admin-form hidden">
           <div id="admin-target" class="name small-name"></div>
-          <label for="admin-amount">Изменение баланса, BIST</label>
-          <input id="admin-amount" class="input" type="number" step="0.1" inputmode="decimal" placeholder="Например, +25 или −2.5">
+          <p id="admin-status" class="muted small"></p>
+          <div class="admin-participant-actions">
+            <button id="admin-view" class="btn ghost">Профиль и история</button>
+            <button id="admin-block" class="btn ghost">Заблокировать</button>
+            <button id="admin-hide" class="btn ghost">Скрыть публичный профиль</button>
+          </div>
+          <label for="admin-mode">Действие с BIST</label>
+          <select id="admin-mode" class="input"><option value="add">Начислить</option><option value="remove">Списать</option></select>
+          <label for="admin-amount">Сумма, BIST</label>
+          <input id="admin-amount" class="input" type="number" min="0.1" step="0.1" inputmode="decimal" placeholder="Например, 25 или 2.5">
           <label for="admin-reason">Причина</label>
           <input id="admin-reason" class="input" maxlength="200" placeholder="Обязательно">
-          <button id="admin-apply" class="btn">Изменить баланс</button>
+          <button id="admin-apply" class="btn">Применить к балансу</button><p class="muted small">Для каждого изменения укажите причину. Блокировка останавливает игровые действия, но сохраняет историю. При разблокировке публичность автоматически не включается.</p>
           <div id="admin-msg" class="msg hidden"></div>
         </div>
 

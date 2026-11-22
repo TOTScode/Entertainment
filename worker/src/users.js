@@ -3,6 +3,7 @@
 // Все суммы здесь — в 1/10000 BIST (см. money.js).
 
 import { UNIT } from "./money.js";
+import { balanceStatisticsColumns } from "./balance-statistics.js";
 
 const now = () => Math.floor(Date.now() / 1000);
 
@@ -76,8 +77,7 @@ export async function registerOrUpdate(db, tgUser, startBalance) {
     db
       .prepare(
         "SELECT u.*, COALESCE(SUM(t.amount), 0) AS balance, " +
-        "COALESCE(SUM(CASE WHEN t.amount > 0 THEN t.amount END), 0) AS earned, " +
-        "COALESCE(-SUM(CASE WHEN t.amount < 0 THEN t.amount END), 0) AS spent " +
+        balanceStatisticsColumns("u.id") + " " +
         "FROM users u LEFT JOIN transactions t ON t.user_id = u.id WHERE u.id = ? GROUP BY u.id",
       )
       .bind(tgUser.id),

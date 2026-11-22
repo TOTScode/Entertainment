@@ -62,3 +62,7 @@ body.dialog-open{overflow:hidden}.brow .who:hover{text-decoration:underline;text
 .q-timer .ui-icon{width:15px;height:15px;vertical-align:-3px}
 
 .table-scroll:has(.rating-table.is-empty)+.table-hint{display:none}
+
+.admin-participant-actions{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 20px}.admin-participant-actions .btn{flex:1 1 140px}#admin-status{overflow-wrap:anywhere}
+
+.season-filter{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:0 0 12px}.season-filter>label{margin:0;color:var(--hint);font-size:13px}.season-picker{position:relative;max-width:75%;min-width:0}.season-picker #board-season{appearance:none;-webkit-appearance:none;width:auto;max-width:100%;min-height:44px;margin:0;padding:8px 28px 8px 10px;border:0;border-radius:8px;background:transparent;color:var(--text);font:inherit;font-size:14px;font-weight:550;cursor:pointer;text-overflow:ellipsis}.season-picker>svg{position:absolute;right:7px;top:50%;transform:translateY(-50%);width:14px;height:14px;fill:none;stroke:var(--hint);stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}.season-picker #board-season:hover{background:var(--soft)}
